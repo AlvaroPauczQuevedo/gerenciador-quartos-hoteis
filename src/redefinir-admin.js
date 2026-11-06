@@ -1,0 +1,43 @@
+import { randomBytes } from 'node:crypto';
+import { existsSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { abrirBanco, exec, transacao, um } from './db.js';
+import { gerarSenha, hashSenha } from './domain/usuarios.js';
+
+export function redefinirAdmin(db, dataDir) {
+  const admin = um(db, `SELECT id FROM usuarios
+    WHERE login = 'admin' AND papel = 'admin' AND ativo = 1 AND excluido_em IS NULL`);
+  if (!admin) throw new Error('Administrador ativo não encontrado; nenhum dado foi alterado.');
+
+  const senha = gerarSenha();
+  const arquivo = join(dataDir, `credenciais-admin-${Date.now()}-${randomBytes(3).toString('hex')}.txt`);
+
+  try {
+    transacao(db, () => {
+      exec(db, 'UPDATE usuarios SET senha_hash = ? WHERE id = ?', hashSenha(senha), admin.id);
+      exec(db, 'DELETE FROM sessoes WHERE usuario_id = ?', admin.id);
+      writeFileSync(arquivo, `Login: admin\nSenha: ${senha}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    });
+  } catch (erro) {
+    rmSync(arquivo, { force: true });
+    throw erro;
+  }
+
+  return arquivo;
+}
+
+const raiz = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const dataDir = resolve(process.env.DATA_DIR || join(raiz, 'data'));
+  const caminhoBanco = join(dataDir, 'hotelaria.db');
+  if (!existsSync(caminhoBanco)) throw new Error(`Banco não encontrado: ${caminhoBanco}. Nenhum dado foi alterado.`);
+
+  const db = abrirBanco(caminhoBanco);
+  try {
+    const arquivo = redefinirAdmin(db, dataDir);
+    console.log(`Senha do admin redefinida. Consulte o arquivo ${arquivo} no Gerenciador de arquivos e apague-o após entrar.`);
+  } finally {
+    db.close();
+  }
+}

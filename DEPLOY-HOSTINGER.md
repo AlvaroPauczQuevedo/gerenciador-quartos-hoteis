@@ -75,6 +75,16 @@ Os dados não são afetados, porque ficam em `manutencao-dados`. As variáveis d
   DATA_DIR=~/manutencao-dados node src/empacotar.js dados
   ```
 
+## Recuperar a senha do administrador
+
+Se não conseguir entrar como `admin`, use o Terminal/SSH da hospedagem. Primeiro, entre na pasta do app Node.js (a que contém `package.json` e `src/`) e confirme que `DATA_DIR` aponta para a pasta existente com `hotelaria.db`. Faça um backup dessa pasta antes de continuar. Depois rode:
+
+```bash
+DATA_DIR=/home/u123456789/manutencao-dados npm run resetar-admin
+```
+
+O comando altera somente o hash da senha de `admin`, invalida as sessões desse usuário e grava uma nova senha em `credenciais-admin-*.txt` dentro de `DATA_DIR`. Se o banco ou o usuário administrador não existirem, ele encerra sem criar banco nem alterar dados. Consulte o arquivo pelo Gerenciador de arquivos, entre com o login `admin` e apague o arquivo de credenciais depois.
+
 ## Limites do plano que valem para este sistema
 
 - **Tempo por requisição:** cada requisição pode levar no máximo 120 segundos. Uma foto de até 15 MB fica bem abaixo disso.
