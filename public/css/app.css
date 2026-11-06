@@ -1,11 +1,11 @@
 :root {
-  --bg: #f4f6f9;
+  --bg: #f4f4f5;
   --surface: #ffffff;
-  --surface-2: #f8fafc;
-  --border: #e2e8f0;
-  --text: #1a2433;
-  --text-2: #4a5568;
-  --muted: #718096;
+  --surface-2: #fafafa;
+  --border: #e4e4e7;
+  --text: #111111;
+  --text-2: #3f3f46;
+  --muted: #71717a;
   /* Marca tri Hotel Executive Osório: Pantone Black C + Cool Gray 3 */
   --marca: #000000;
   --marca-cinza: #b9b9b9;
@@ -18,7 +18,7 @@
   --serious: #c05621; --serious-soft: #fde8da;
   --danger: #c53030; --danger-soft: #fde2e2;
   --info: #2b6cb0; --info-soft: #e3effb;
-  --neutral-soft: #edf2f7;
+  --neutral-soft: #ececee;
   --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .08);
   --radius: 10px;
   --sidebar: 236px;
@@ -27,11 +27,11 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #0e0f11; --surface: #17191c; --surface-2: #1e2125; --border: #2c3035;
-    --text: #e6ebf2; --text-2: #b8c2d0; --muted: #8a96a8;
+    --text: #ededed; --text-2: #c4c4c8; --muted: #9a9aa2;
     --primary: #ededed; --primary-2: #ededed; --primary-soft: #262b33; --bar: #b9b9b9;
     --ok: #68d391; --ok-soft: #173a29; --warn: #f6c35b; --warn-soft: #3d311a;
     --serious: #f6a26b; --serious-soft: #3f2717; --danger: #fc8181; --danger-soft: #42201f;
-    --info: #90cdf4; --info-soft: #1a3048; --neutral-soft: #222d3e;
+    --info: #90cdf4; --info-soft: #1a3048; --neutral-soft: #2a2d32;
     --shadow: 0 1px 2px rgba(0, 0, 0, .4);
     color-scheme: dark;
   }
@@ -109,6 +109,8 @@ img, video { max-width: 100%; }
 .card + .card, .card + .grade, .grade + .card, .grade + .grade { margin-top: 1rem; }
 .grade > .card, .col-principal > *, .kpis > * { margin-top: 0; }
 .col-principal { align-items: start; }
+/* Itens de grade podem encolher: tabelas largas rolam dentro do cartão, não a página. */
+.grade > *, .col-principal > *, .pilha > * { min-width: 0; }
 .card > h2:first-child, .card > h3:first-child { margin-bottom: .75rem; }
 .card-titulo { display: flex; justify-content: space-between; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .75rem; min-height: 32px; }
 .card > h2:first-child, .card > h3:first-child { min-height: 32px; display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
@@ -120,12 +122,12 @@ img, video { max-width: 100%; }
 @media (max-width: 1100px) { .col-principal { grid-template-columns: 1fr; } }
 .pilha > * + * { margin-top: 1rem; }
 
-.kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 165px), 1fr)); gap: .75rem; margin-bottom: 1rem; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 185px), 1fr)); gap: .75rem; margin-bottom: 1rem; }
 .kpi { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: var(--radius); padding: .8rem .9rem; box-shadow: var(--shadow); display: flex; flex-direction: column; color: inherit; text-decoration: none; min-height: 92px; }
 .kpi, .kpi * { text-decoration: none; }
 a.kpi:hover { text-decoration: none; border-color: var(--primary-2); }
 .kpi .rotulo { color: var(--text-2); font-size: .8rem; font-weight: 500; }
-.kpi .valor { font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; margin-top: .15rem; }
+.kpi .valor { font-size: clamp(1.15rem, 1.4vw + .4rem, 1.6rem); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; margin-top: .15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kpi .detalhe { color: var(--muted); font-size: .78rem; margin-top: auto; padding-top: .2rem; }
 .kpi.alerta { border-left-color: var(--danger); }
 .kpi.atencao { border-left-color: var(--warn); }
@@ -244,8 +246,8 @@ input[type=checkbox], input[type=radio] { width: auto; min-height: 0; accent-col
 .barras { display: grid; gap: .45rem; }
 .barra { display: grid; grid-template-columns: minmax(90px, 34%) 1fr auto; gap: .6rem; align-items: center; font-size: .85rem; }
 .barra .nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
-.barra .trilho { height: 12px; background: var(--neutral-soft); border-radius: 3px; overflow: hidden; }
-.barra .preenchido { height: 100%; background: var(--bar); border-radius: 0 4px 4px 0; min-width: 2px; }
+.barra .trilho { display: block; height: 12px; background: var(--neutral-soft); border-radius: 3px; overflow: hidden; }
+.barra .preenchido { display: block; height: 100%; background: var(--bar); border-radius: 0 4px 4px 0; min-width: 2px; }
 .barra .valor { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 3.5rem; text-align: right; }
 .barra:hover .preenchido { filter: brightness(1.15); }
 
@@ -314,3 +316,21 @@ input[type=checkbox], input[type=radio] { width: auto; min-height: 0; accent-col
 
 /* Badges dentro de células: quebram linha sem estourar a coluna. */
 td .badge { margin: .1rem .15rem .1rem 0; }
+
+/* Barra de ações da OS: próximo passo em destaque, demais ações compactas. */
+.barra-acoes { display: grid; gap: .75rem; }
+.grupo-acoes { display: grid; grid-template-columns: 8.5rem 1fr; gap: .5rem 1rem; align-items: center; }
+.grupo-acoes + .grupo-acoes { padding-top: .75rem; border-top: 1px solid var(--border); }
+.rotulo-acoes { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+@media (max-width: 700px) { .grupo-acoes { grid-template-columns: 1fr; } }
+
+@media (max-width: 600px) {
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+  .kpi { min-height: 84px; padding: .65rem .7rem; }
+  .filtros > label:not(.check) { flex: 1 1 100%; }
+  .filtros select, .filtros input:not([type=checkbox]) { min-width: 0; }
+  .cabecalho .acoes-topo { width: 100%; }
+  .cabecalho .acoes-topo .btn { flex: 1 1 auto; }
+  .respostas { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  .respostas button { width: 100%; }
+}

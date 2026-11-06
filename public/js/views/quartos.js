@@ -64,8 +64,8 @@ export async function mostrar(el, _p, query) {
       <label>Comercialização <select name="status_comercial"><option value="">Todos</option>
         <option value="liberado" ${query.status_comercial === 'liberado' ? 'selected' : ''}>Liberados</option>
         <option value="bloqueado" ${query.status_comercial === 'bloqueado' ? 'selected' : ''}>Bloqueados</option></select></label>
-      <label class="check" style="flex-direction:row;align-self:center"><input type="checkbox" name="com_problemas" value="1" ${query.com_problemas ? 'checked' : ''}> Com problemas</label>
-      <label class="check" style="flex-direction:row;align-self:center"><input type="checkbox" name="inspecao_vencida" value="1" ${query.inspecao_vencida ? 'checked' : ''}> Inspeção vencida</label>
+      <label class="check"><input type="checkbox" name="com_problemas" value="1" ${query.com_problemas ? 'checked' : ''}> Com problemas</label>
+      <label class="check"><input type="checkbox" name="inspecao_vencida" value="1" ${query.inspecao_vencida ? 'checked' : ''}> Inspeção vencida</label>
     </form>
     ${hoteis ? html`
       <p class="muted small">Escolha o hotel:</p>

@@ -93,6 +93,8 @@ export async function mostrar(el, [id]) {
   const os = await api(`/api/os/${id}`);
   const m = M();
   const acoesVisiveis = os.acoes.filter((a) => !a.interna);
+  const principais = acoesVisiveis.filter((a) => DESTAQUE[a.chave]);
+  const secundarias = acoesVisiveis.filter((a) => !DESTAQUE[a.chave]).sort((x, y) => PERIGO.includes(x.chave) - PERIGO.includes(y.chave));
   const custoTotal = os.custos.reduce((s, c) => s + c.valor, 0);
   const pessoa = (papel, nome, quando) => html`<div><div class="papel">${papel}</div><div class="nome">${nome || html`<span class="muted">—</span>`}</div>${quando ? html`<div class="muted small">${dataHora(quando)}</div>` : ''}</div>`;
   const fotosPorFase = Object.keys(m.FASES_FOTO).map((f) => [f, os.fotos.filter((x) => x.fase === f)]).filter(([, l]) => l.length);
@@ -110,7 +112,10 @@ export async function mostrar(el, [id]) {
           ${os.prioridade !== os.prioridade_original ? html`<span class="badge sem-ponto">Prioridade original: ${m.PRIORIDADES[os.prioridade_original]}</span>` : ''}</div>
       </div>
     </div>
-    ${acoesVisiveis.length ? html`<div class="card" style="margin-bottom:1rem"><div class="acoes-topo">${acoesVisiveis.map((a) => html`<button class="btn ${DESTAQUE[a.chave] || ''} ${PERIGO.includes(a.chave) ? 'perigo' : ''}" data-acao="${a.chave}">${a.rotulo}</button>`)}</div></div>` : ''}
+    ${acoesVisiveis.length ? html`<div class="card barra-acoes" style="margin-bottom:1rem">
+      ${principais.length ? html`<div class="grupo-acoes"><span class="rotulo-acoes">Próximo passo</span><div class="acoes-topo">${principais.map((a) => html`<button class="btn ${DESTAQUE[a.chave]}" data-acao="${a.chave}">${a.rotulo}</button>`)}</div></div>` : ''}
+      ${secundarias.length ? html`<div class="grupo-acoes"><span class="rotulo-acoes">Outras ações</span><div class="acoes-topo">${secundarias.map((a) => html`<button class="btn pequeno ${PERIGO.includes(a.chave) ? 'perigo' : ''}" data-acao="${a.chave}">${a.rotulo}</button>`)}</div></div>` : ''}
+    </div>` : ''}
     ${os.status === 'concluida' && os.acoes.some((a) => a.chave === 'validar') ? html`<div class="aviso info" style="margin-bottom:1rem"><span class="icone">✓</span><div>O serviço foi concluído e aguarda sua validação. Confira as evidências abaixo e aprove, solicite correção ou registre observações.</div></div>` : ''}
     ${os.atrasada ? html`<div class="aviso danger" style="margin-bottom:1rem"><span class="icone">!</span><div>Demanda atrasada — o prazo venceu ${relativo(os.prazo_previsto)} (${dataHora(os.prazo_previsto)}).</div></div>` : ''}
     <div class="col-principal">
