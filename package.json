@@ -9,7 +9,6 @@
   },
   "scripts": {
     "start": "node server.js",
-    "resetar-admin": "node src/redefinir-admin.js",
     "pacote": "node --disable-warning=ExperimentalWarning src/empacotar.js app",
     "exportar-dados": "node --disable-warning=ExperimentalWarning src/empacotar.js dados",
     "seed": "node --disable-warning=ExperimentalWarning src/seed.js --reset",
