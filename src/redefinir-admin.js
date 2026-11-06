@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,6 +24,37 @@ export function redefinirAdmin(db, dataDir) {
     throw erro;
   }
 
+  return arquivo;
+}
+
+export function redefinirAdminUmaVez(db, dataDir, token) {
+  if (typeof token !== 'string' || token.length < 32) {
+    throw new Error('ADMIN_RESET_TOKEN deve conter ao menos 32 caracteres.');
+  }
+  const identificador = createHash('sha256').update(token).digest('hex');
+  const marcador = join(dataDir, `.admin-reset-${identificador}.done`);
+  if (existsSync(marcador)) return null;
+
+  const admin = um(db, `SELECT id FROM usuarios
+    WHERE login = 'admin' AND papel = 'admin' AND ativo = 1 AND excluido_em IS NULL`);
+  if (!admin) throw new Error('Administrador ativo não encontrado; nenhum dado foi alterado.');
+
+  const senha = gerarSenha();
+  const arquivo = join(dataDir, `credenciais-admin-${Date.now()}-${randomBytes(3).toString('hex')}.txt`);
+  let marcadorCriado = false;
+  try {
+    transacao(db, () => {
+      exec(db, 'UPDATE usuarios SET senha_hash = ? WHERE id = ?', hashSenha(senha), admin.id);
+      exec(db, 'DELETE FROM sessoes WHERE usuario_id = ?', admin.id);
+      writeFileSync(arquivo, `Login: admin\nSenha: ${senha}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+      writeFileSync(marcador, '', { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+      marcadorCriado = true;
+    });
+  } catch (erro) {
+    rmSync(arquivo, { force: true });
+    if (marcadorCriado) rmSync(marcador, { force: true });
+    throw erro;
+  }
   return arquivo;
 }
 

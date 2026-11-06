@@ -77,7 +77,9 @@ Os dados não são afetados, porque ficam em `manutencao-dados`. As variáveis d
 
 ## Recuperar a senha do administrador
 
-Se não conseguir entrar como `admin`, use o Terminal/SSH da hospedagem. Primeiro, entre na pasta do app Node.js (a que contém `package.json` e `src/`) e confirme que `DATA_DIR` aponta para a pasta existente com `hotelaria.db`. Faça um backup dessa pasta antes de continuar. Depois rode:
+Se não conseguir entrar como `admin`, o utilitário pode ser executado pelo Terminal/SSH da hospedagem. Primeiro, entre na pasta do app Node.js (a que contém `package.json` e `src/`) e confirme que `DATA_DIR` aponta para a pasta existente com `hotelaria.db`. Faça um backup dessa pasta antes de continuar. Se o Node.js não estiver disponível no SSH, configure temporariamente a variável `ADMIN_RESET_TOKEN` no hPanel com um valor aleatório de pelo menos 32 caracteres e reinicie o app. Na próxima inicialização, o app redefine a senha uma única vez e grava o arquivo de credenciais em `DATA_DIR`. Remova a variável do hPanel logo depois.
+
+Com Node.js disponível no SSH, rode:
 
 ```bash
 DATA_DIR=/home/u123456789/manutencao-dados npm run resetar-admin
