@@ -1,0 +1,17 @@
+{
+  "name": "gerenciador-quartos-hoteis",
+  "version": "1.0.0",
+  "description": "Plataforma integrada de gestão hoteleira, conservação predial e manutenção operacional",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "seed": "node --disable-warning=ExperimentalWarning src/seed.js --reset",
+    "importar-rede": "node --disable-warning=ExperimentalWarning src/importar-rede.js",
+    "seed:demo": "node --disable-warning=ExperimentalWarning src/seed.js --reset --demo",
+    "test": "node --disable-warning=ExperimentalWarning --test \"tests/**/*.test.js\""
+  }
+}
