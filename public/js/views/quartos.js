@@ -8,7 +8,8 @@ function grupoDe(q) {
   if (q.andar) return { chave: `a${q.andar}`, rotulo: /^\d+$/.test(q.andar) ? `${q.andar}º andar` : q.andar, ordem: [0, Number(q.andar) || 0, q.andar] };
   const n = parseInt(q.numero, 10);
   if (Number.isNaN(n)) return { chave: 'outros', rotulo: 'Outros', ordem: [2, 0, ''] };
-  if (n >= 100) {
+  // Numeração provisória (1, 2, 3…) não indica andar: sempre em faixas.
+  if (n >= 100 && !q.numeracao_provisoria) {
     const andar = Math.floor(n / 100);
     return { chave: `a${andar}`, rotulo: `${andar}º andar`, ordem: [0, andar, ''] };
   }

@@ -2,6 +2,15 @@
 
 Plataforma integrada de gestão hoteleira, conservação predial e manutenção operacional para redes com várias unidades.
 
+## Publicação (Hostinger)
+
+O passo a passo está em [DEPLOY-HOSTINGER.md](DEPLOY-HOSTINGER.md). Os comandos usados são:
+
+- `npm run pacote`: gera o zip do app, sem dados.
+- `npm run exportar-dados`: gera um zip consistente do banco com as fotos.
+
+Em produção, defina `NODE_ENV=production` e `DATA_DIR` apontando para uma pasta **fora** do app.
+
 ## Rede Tri Hotéis
 
 Os 23 hotéis da rede estão em `src/rede.js` (nome, cidade/UF, quantidade de quartos e logo). Para adicionar ao banco os que ainda não existem:

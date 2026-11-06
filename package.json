@@ -8,7 +8,9 @@
     "node": ">=22.13"
   },
   "scripts": {
-    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "start": "node server.js",
+    "pacote": "node --disable-warning=ExperimentalWarning src/empacotar.js app",
+    "exportar-dados": "node --disable-warning=ExperimentalWarning src/empacotar.js dados",
     "seed": "node --disable-warning=ExperimentalWarning src/seed.js --reset",
     "importar-rede": "node --disable-warning=ExperimentalWarning src/importar-rede.js",
     "seed:demo": "node --disable-warning=ExperimentalWarning src/seed.js --reset --demo",
