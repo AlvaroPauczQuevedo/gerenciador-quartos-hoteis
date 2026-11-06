@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { abrirBanco, exec, um } from '../src/db.js';
-import { redefinirAdmin, redefinirAdminUmaVez } from '../src/redefinir-admin.js';
+import { atualizarNomeAdminUmaVez, redefinirAdmin, redefinirAdminUmaVez } from '../src/redefinir-admin.js';
 import { hashSenha, login } from '../src/domain/usuarios.js';
 
 test('redefine somente a senha do admin, invalida sessões e preserva os demais dados', () => {
@@ -58,6 +58,28 @@ test('o token temporário só redefine a senha uma vez, mesmo após reinicializa
     assert.equal(login(db, 'admin', senhaNova).length, 64);
     assert.equal(redefinirAdminUmaVez(db, dataDir, token), null);
     assert.throws(() => redefinirAdminUmaVez(db, dataDir, 'curto'), /ao menos 32 caracteres/);
+  } finally {
+    db.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('atualiza somente o nome do administrador uma vez e mantém senha e outros usuários', () => {
+  const db = abrirBanco(':memory:');
+  const dataDir = mkdtempSync(join(tmpdir(), 'hotelaria-admin-name-'));
+  try {
+    const adminId = Number(exec(db, `INSERT INTO usuarios (nome, login, senha_hash, papel)
+      VALUES ('Admin antigo', 'admin', ?, 'admin')`, hashSenha('senha-preservada')).lastInsertRowid);
+    const gerenteId = Number(exec(db, `INSERT INTO usuarios (nome, login, senha_hash, papel)
+      VALUES ('Gerente', 'gerencia', ?, 'gerente')`, hashSenha('senha-gerente')).lastInsertRowid);
+    const token = 'token-para-mudar-nome-admin-com-mais-de-32-caracteres';
+
+    assert.equal(atualizarNomeAdminUmaVez(db, dataDir, token, ' Álvaro Quevedo '), true);
+    assert.equal(um(db, 'SELECT nome FROM usuarios WHERE id = ?', adminId).nome, 'Álvaro Quevedo');
+    assert.equal(um(db, 'SELECT nome FROM usuarios WHERE id = ?', gerenteId).nome, 'Gerente');
+    assert.equal(login(db, 'admin', 'senha-preservada').length, 64);
+    assert.equal(atualizarNomeAdminUmaVez(db, dataDir, token, 'Outro nome'), false);
+    assert.equal(um(db, 'SELECT nome FROM usuarios WHERE id = ?', adminId).nome, 'Álvaro Quevedo');
   } finally {
     db.close();
     rmSync(dataDir, { recursive: true, force: true });

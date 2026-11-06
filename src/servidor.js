@@ -10,7 +10,7 @@ import * as fotos from './domain/fotos.js';
 import { verificar } from './domain/agendador.js';
 import { popularPiloto, gravarCredenciais, HOTEL_PILOTO } from './seed.js';
 import { importarRede, gravarCredenciaisRede } from './rede.js';
-import { redefinirAdminUmaVez } from './redefinir-admin.js';
+import { atualizarNomeAdminUmaVez, redefinirAdminUmaVez } from './redefinir-admin.js';
 
 const raiz = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dataDir = resolve(process.env.DATA_DIR || join(raiz, 'data'));
@@ -37,6 +37,10 @@ if (!um(db, 'SELECT id FROM usuarios LIMIT 1')) {
 if (process.env.ADMIN_RESET_TOKEN) {
   const arquivo = redefinirAdminUmaVez(db, dataDir, process.env.ADMIN_RESET_TOKEN);
   if (arquivo) console.log(`Senha do admin redefinida. Consulte ${arquivo} e apague o arquivo após entrar.`);
+}
+if (process.env.ADMIN_NAME_RESET_TOKEN && process.env.ADMIN_DISPLAY_NAME) {
+  const atualizado = atualizarNomeAdminUmaVez(db, dataDir, process.env.ADMIN_NAME_RESET_TOKEN, process.env.ADMIN_DISPLAY_NAME);
+  if (atualizado) console.log('Nome de exibição do administrador atualizado.');
 }
 
 const rotas = criarRotas();
