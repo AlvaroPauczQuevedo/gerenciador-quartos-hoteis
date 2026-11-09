@@ -35,7 +35,8 @@ export async function iniciarPWA() {
     el.querySelector('button').addEventListener('click', () => { el.remove(); sw.postMessage({ tipo: 'atualizar' }); });
     document.getElementById('toasts').append(el);
   };
-  if (registro.waiting) oferecerAtualizacao(registro.waiting);
+  // Ao abrir o app não há nada em andamento: se já existe versão nova baixada, aplica direto.
+  if (registro.waiting && navigator.serviceWorker.controller) registro.waiting.postMessage({ tipo: 'atualizar' });
   registro.addEventListener('updatefound', () => {
     const novo = registro.installing;
     novo?.addEventListener('statechange', () => { if (novo.state === 'installed') oferecerAtualizacao(novo); });

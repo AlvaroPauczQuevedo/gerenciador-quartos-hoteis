@@ -30,7 +30,7 @@ export async function mostrar(el, _p, query) {
     <div class="etiquetas" style="--tam-etiqueta:${TAMANHOS[tamanho]}">
       ${selecionados.map((q) => html`<div class="etiqueta">
         <img class="etiqueta-logo" src="${logo}" alt="">
-        <div class="etiqueta-qr">${raw(qrSVG(`${location.origin}/#/q/${q.id}`))}</div>
+        <div class="etiqueta-qr">${raw(qrSVG(`${location.origin}/q/${q.id}`))}</div>
         <div class="etiqueta-num">Quarto ${q.numero}</div>
         <div class="etiqueta-dica">Manutenção: aponte a câmera</div>
       </div>`)}

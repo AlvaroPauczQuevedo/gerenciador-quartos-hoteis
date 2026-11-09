@@ -117,6 +117,12 @@ async function tratar(req, res) {
   const caminho = url.pathname;
   const sid = cookies(req)[COOKIE];
 
+  // Etiqueta de QR code da porta do quarto: /q/<id> leva ao quarto no app.
+  const etiqueta = /^\/q\/(\d+)\/?$/.exec(caminho);
+  if (etiqueta && (req.method === 'GET' || req.method === 'HEAD')) {
+    res.writeHead(302, { Location: `/#/quartos/${etiqueta[1]}`, 'Cache-Control': 'no-store' });
+    return res.end();
+  }
   if (caminho === '/healthz') return json(res, 200, { ok: true, versao: VERSAO_APP });
   if (caminho === '/service-worker.js' || caminho === '/sw.js') {
     res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Service-Worker-Allowed': '/' });

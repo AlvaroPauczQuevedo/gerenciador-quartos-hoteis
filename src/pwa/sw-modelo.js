@@ -30,12 +30,26 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(fetch(e.request).catch(() => caches.match('/')));
     return;
   }
-  // Arquivos do app (versionados): cache primeiro, completando o cache com o que faltar (ex.: logos dos hotéis).
+  // Código do app (JS/CSS): rede primeiro, para nunca rodar uma versão antiga com internet disponível;
+  // sem conexão, usa a cópia guardada.
+  if (/^\/(css|js)\//.test(url.pathname) || url.pathname === '/manifest.webmanifest') {
+    e.respondWith((async () => {
+      try {
+        const resp = await fetch(e.request, { cache: 'no-cache' });
+        if (resp.ok) (await caches.open(CACHE)).put(e.request, resp.clone());
+        return resp;
+      } catch {
+        return (await caches.match(e.request)) || Response.error();
+      }
+    })());
+    return;
+  }
+  // Imagens (logos, ícones): cache primeiro, completando o cache com o que faltar.
   e.respondWith((async () => {
     const guardado = await caches.match(e.request);
     if (guardado) return guardado;
     const resp = await fetch(e.request);
-    if (resp.ok && /^\/(img|css|js)\//.test(url.pathname)) (await caches.open(CACHE)).put(e.request, resp.clone());
+    if (resp.ok && /^\/img\//.test(url.pathname)) (await caches.open(CACHE)).put(e.request, resp.clone());
     return resp;
   })());
 });
