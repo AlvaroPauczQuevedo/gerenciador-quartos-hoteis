@@ -33,6 +33,14 @@ export async function mostrar(el, _p, query = {}) {
       </section>` : ''}
     <div class="grade grade-3">
 
+      ${admin ? html`<section class="card" style="grid-column:1/-1"><h2>Importar quartos da planilha (HITS)</h2>
+        <p class="small muted">Envie a planilha com as colunas <strong>Hotel</strong>, <strong>Apartamento</strong> e <strong>Categoria</strong> (.xlsx ou .csv).
+          Primeiro aparece uma prévia do que muda em cada hotel; nada é alterado até você confirmar. Quartos provisórios sem histórico são substituídos;
+          quartos que já têm demandas, inspeções ou fotos nunca são apagados.</p>
+        <div class="acoes-topo"><label class="btn">📄 Escolher planilha<input type="file" id="arquivo-quartos" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" hidden></label>
+          <span class="small muted" id="nome-planilha">Nenhum arquivo escolhido</span></div>
+        <div id="previa-importacao"></div>
+      </section>` : ''}
       <section class="card"><h2>Numeração real dos quartos</h2>
         <p class="small muted">Quartos criados só pela quantidade ficam com numeração provisória (1, 2, 3…). Informe aqui as faixas reais por andar:
           os provisórios sem histórico são substituídos pelos números informados.</p>
@@ -129,6 +137,47 @@ export async function mostrar(el, _p, query = {}) {
       });
     });
   }
+  // ---- Importação da planilha de quartos ----
+  let planilha = null;
+  const tabelaImportacao = (r) => html`<div class="tabela-wrap" style="margin-top:.75rem"><table><thead><tr><th>Hotel</th><th class="num">Na planilha</th>
+      <th class="num">Criar</th><th class="num">Atualizar</th><th class="num">Já iguais</th><th class="num">Provisórios removidos</th><th>Atenção</th></tr></thead><tbody>
+    ${r.hoteis.map((h) => html`<tr><td>${h.hotel}</td><td class="num">${h.na_planilha}</td><td class="num">${h.criados}</td><td class="num">${h.atualizados}</td>
+      <td class="num">${h.mantidos}</td><td class="num">${h.provisorios_removidos}</td>
+      <td class="small">${h.provisorios_com_historico.length ? html`<span class="badge warn sem-ponto">${h.provisorios_com_historico.length} provisório(s) com histórico</span> mantidos como PROV-… para revisão<br>` : ''}
+        ${h.fora_da_planilha.length ? html`<span class="badge sem-ponto">${h.fora_da_planilha.length} fora da planilha</span> ${h.fora_da_planilha.slice(0, 8).join(', ')}${h.fora_da_planilha.length > 8 ? '…' : ''} (não são apagados)` : ''}
+        ${!h.provisorios_com_historico.length && !h.fora_da_planilha.length ? html`<span class="muted">—</span>` : ''}</td></tr>`)}</tbody></table></div>
+    ${r.nao_encontrados.length ? html`<div class="aviso warn" style="margin-top:.5rem"><span class="icone">!</span><div>Hotéis da planilha que não existem no sistema (ignorados): ${r.nao_encontrados.join(', ')}.</div></div>` : ''}
+    ${r.hoteis_sem_planilha.length ? html`<p class="small muted">Sem linhas na planilha (não alterados): ${r.hoteis_sem_planilha.join(', ')}.</p>` : ''}`;
+  $('#arquivo-quartos', el)?.addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    $('#nome-planilha', el).textContent = f.name;
+    const alvo = $('#previa-importacao', el);
+    alvo.innerHTML = html`<p class="muted">Lendo a planilha…</p>`.s;
+    try {
+      planilha = await new Promise((ok, erro) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = erro; r.readAsDataURL(f); });
+      const r = await post('/api/quartos/importar', { arquivo: planilha });
+      const totais = r.hoteis.reduce((t, h) => ({ c: t.c + h.criados, a: t.a + h.atualizados, p: t.p + h.provisorios_removidos }), { c: 0, a: 0, p: 0 });
+      alvo.innerHTML = html`<div class="aviso info" style="margin-top:.75rem"><span class="icone">i</span><div><strong>Prévia:</strong> ${r.total_planilha} quartos em ${r.hoteis.length} hotel(is) —
+        ${totais.c} a criar, ${totais.a} a atualizar, ${totais.p} provisório(s) a remover. Nada foi alterado ainda.</div></div>
+        ${tabelaImportacao(r)}
+        <div class="acoes-topo" style="margin-top:.75rem"><button class="btn primario" id="aplicar-importacao">Aplicar importação</button>
+          <button class="btn" id="cancelar-importacao">Cancelar</button></div>`.s;
+      $('#cancelar-importacao', el).addEventListener('click', () => { alvo.innerHTML = ''; planilha = null; $('#nome-planilha', el).textContent = 'Nenhum arquivo escolhido'; e.target.value = ''; });
+      $('#aplicar-importacao', el).addEventListener('click', async (ev) => {
+        const b = ev.target;
+        if (b.dataset.confirmar !== '1') { b.dataset.confirmar = '1'; b.textContent = 'Confirmar: aplicar em todos os hotéis listados'; return; }
+        b.disabled = true; b.textContent = 'Aplicando…';
+        try {
+          const feito = await post('/api/quartos/importar', { arquivo: planilha, aplicar: true });
+          toast(`Importação concluída: ${feito.hoteis.reduce((t, h) => t + h.criados, 0)} quarto(s) criado(s), ${feito.hoteis.reduce((t, h) => t + h.atualizados, 0)} atualizado(s).`);
+          recarregar();
+        } catch (err) { toast(err.message, 'erro'); b.disabled = false; b.dataset.confirmar = ''; b.textContent = 'Aplicar importação'; }
+      });
+    } catch (err) {
+      alvo.innerHTML = html`<div class="aviso danger" style="margin-top:.75rem"><span class="icone">!</span><div>${err.message}</div></div>`.s;
+    }
+  });
   $('#add-faixa', el).addEventListener('click', () => $('#faixas', el).insertAdjacentHTML('beforeend', linhaFaixa().s));
   $('#f-numeracao', el).addEventListener('submit', async (e) => {
     e.preventDefault();

@@ -240,8 +240,8 @@ export function definirEstrelas(db, usuario, quartoId, estrelas) {
 
 // ---- Edição e numeração ----
 
-const TABELAS_HISTORICO_QUARTO = ['ordens_servico', 'inspecoes', 'fotos', 'bloqueios', 'problemas_cronicos'];
-const temHistorico = (db, quartoId) =>
+const TABELAS_HISTORICO_QUARTO = ['ordens_servico', 'inspecoes', 'fotos', 'bloqueios', 'problemas_cronicos', 'avaliacoes_hospedes'];
+export const temHistorico = (db, quartoId) =>
   TABELAS_HISTORICO_QUARTO.some((t) => um(db, `SELECT 1 AS x FROM ${t} WHERE quarto_id = ? LIMIT 1`, quartoId));
 
 export function editar(db, usuario, id, dados) {
@@ -257,10 +257,11 @@ export function editar(db, usuario, id, dados) {
 }
 
 // Só exclui quartos sem nenhum registro (OS, inspeção, foto, bloqueio ou problema crônico).
-function apagar(db, quartoId) {
+export function apagar(db, quartoId) {
   exec(db, 'DELETE FROM notificacoes WHERE quarto_id = ?', quartoId);
   exec(db, 'DELETE FROM quarto_historico WHERE quarto_id = ?', quartoId);
   exec(db, 'DELETE FROM equipamentos WHERE quarto_id = ?', quartoId);
+  exec(db, 'DELETE FROM preventiva_agenda WHERE quarto_id = ?', quartoId);
   exec(db, 'DELETE FROM quartos WHERE id = ?', quartoId);
 }
 

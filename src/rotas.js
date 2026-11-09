@@ -14,6 +14,7 @@ import * as backup from './domain/backup.js';
 import * as preventiva from './domain/preventiva.js';
 import * as estoque from './domain/estoque.js';
 import * as hospedes from './domain/hospedes.js';
+import * as importacaoQuartos from './domain/importacao-quartos.js';
 import { ErroHttp } from './domain/comum.js';
 import { analise as analiseRecorrencia, ocorrenciasRelacionadas } from './domain/recorrencia.js';
 import { indicadores, rede, resumoInicial } from './domain/indicadores.js';
@@ -54,6 +55,11 @@ export function criarRotas() {
   get('/api/quartos', ({ db, usuario, query }) => quartos.listar(db, usuario, query));
   post('/api/quartos', ({ db, usuario, body }) => { const id = quartos.criar(db, usuario, body); aud(db, usuario, 'quarto_criado', { hotel_id: Number(body.hotel_id), alvo: body.numero }); return { id }; });
   post('/api/quartos/lote', ({ db, usuario, body }) => { const r = quartos.criarLote(db, usuario, body); aud(db, usuario, 'quarto_criado', { hotel_id: Number(body.hotel_id), alvo: body.inicio + '–' + body.fim, detalhes: { criados: r.criados } }); return r; });
+  post('/api/quartos/importar', ({ db, usuario, body }) => {
+    const r = importacaoQuartos.importar(db, usuario, body);
+    if (r.aplicado) for (const h of r.hoteis) aud(db, usuario, 'numeracao_definida', { hotel_id: h.hotel_id, alvo: 'Planilha de quartos (HITS)', detalhes: { criados: h.criados, atualizados: h.atualizados, provisorios_removidos: h.provisorios_removidos, fora_da_planilha: h.fora_da_planilha.length } });
+    return r;
+  });
   post('/api/quartos/numeracao', ({ db, usuario, body }) => { const r = quartos.definirNumeracao(db, usuario, body); aud(db, usuario, 'numeracao_definida', { hotel_id: Number(body.hotel_id || usuario.hotel_id), detalhes: { faixas: body.faixas, ...r } }); return r; });
   put('/api/quartos/:id', ({ db, usuario, params, body }) => { const a = alvoQuarto(db, params.id); quartos.editar(db, usuario, Number(params.id), body); aud(db, usuario, 'quarto_editado', { hotel_id: a?.hotel_id, alvo: a?.numero, detalhes: body }); return { ok: true }; });
   post('/api/quartos/:id/excluir', ({ db, usuario, params }) => { const a = alvoQuarto(db, params.id); quartos.excluir(db, usuario, Number(params.id)); aud(db, usuario, 'quarto_excluido', { hotel_id: a?.hotel_id, alvo: a?.numero }); return { ok: true }; });

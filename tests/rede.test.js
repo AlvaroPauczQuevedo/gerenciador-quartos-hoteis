@@ -33,7 +33,7 @@ test('importa os 22 hotéis novos, mantém Osório e é idempotente', () => {
     assert.deepEqual(equipe, [{ login: loginGerencia(h), papel: 'gerente' }], `${h.nome}: só a gerência`);
   }
   const santaMaria = um(db, "SELECT id FROM hoteis WHERE logo = 'smart-santa-maria'");
-  assert.equal(um(db, 'SELECT COUNT(*) AS n FROM quartos WHERE hotel_id = ?', santaMaria.id).n, 0);
+  assert.equal(um(db, 'SELECT COUNT(*) AS n FROM quartos WHERE hotel_id = ?', santaMaria.id).n, 98, 'Smart Santa Maria: total do HITS');
 });
 
 test('logins da gerência válidos e logos presentes para todos os hotéis', () => {
