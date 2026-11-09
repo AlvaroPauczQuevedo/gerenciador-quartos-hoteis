@@ -26,11 +26,12 @@ export function usuariosDoHotel(db, hotelId, papeis) {
   ).map((r) => r.id);
 }
 
-// Diretoria/admin só recebem alertas gerenciais (recorrência, aprovações), não o dia a dia.
-export const equipeManutencao = (db, hotelId) => usuariosDoHotel(db, hotelId, ['manutencao_chefe']);
+// Diretoria/admin só recebem alertas gerenciais (recorrência, aprovações acima da alçada do gerente), não o dia a dia.
 export const gerentesDoHotel = (db, hotelId) =>
   todos(db, "SELECT id FROM usuarios WHERE ativo = 1 AND papel = 'gerente' AND hotel_id = ?", hotelId).map((r) => r.id);
-export const aprovadoresDoHotel = (db, hotelId) => usuariosDoHotel(db, hotelId, ['aprovador_financeiro', 'diretoria']);
+// Não há chefe de manutenção: o gerente do hotel recebe as demandas e distribui direto para os técnicos.
+export const equipeManutencao = gerentesDoHotel;
+export const aprovadoresDoHotel = (db, hotelId) => usuariosDoHotel(db, hotelId, ['diretoria', 'admin']);
 
 export function listar(db, usuarioId, { somenteNaoLidas = false, limite = 50 } = {}) {
   return todos(

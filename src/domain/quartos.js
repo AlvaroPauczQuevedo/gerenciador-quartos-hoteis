@@ -206,7 +206,7 @@ export function adicionarEquipamento(db, usuario, quartoId, { tipo, descricao, i
 // Substituição de equipamento (recomendação da análise de recorrência): desativa o antigo e cria um novo,
 // zerando a contagem de recorrência do novo equipamento sem perder o histórico do anterior.
 export function substituirEquipamento(db, usuario, equipamentoId, { descricao }, agora) {
-  exigirPapel(usuario, 'admin', 'gerente', 'manutencao_chefe');
+  exigirPapel(usuario, 'admin', 'gerente');
   const e = um(db, 'SELECT * FROM equipamentos WHERE id = ?', equipamentoId);
   exigir(e, 'Equipamento não encontrado.', 404);
   const q = buscarQuarto(db, e.quarto_id);

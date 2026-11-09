@@ -6,12 +6,10 @@ import { estadoPush, ativarPush, desativarPush, testarPush, instalar } from '../
 // O que cada perfil recebe no celular (as notificações aqui dentro continuam completas).
 const RESUMO_PUSH = {
   tecnico: 'serviços designados a você, correções pedidas, prazos próximos e atrasos',
-  manutencao_chefe: 'novas demandas, atrasos, pedidos de material, reaberturas, correções e decisões de orçamento',
   gerente: 'serviços concluídos aguardando sua validação, quartos bloqueados, devoluções, recusas, recorrências e emergências',
   governanta: 'inspeções vencidas, devoluções, recusas e serviços concluídos das suas solicitações',
-  aprovador_financeiro: 'orçamentos aguardando aprovação',
   diretoria: 'orçamentos aguardando aprovação e recorrências críticas',
-  admin: 'recorrências críticas',
+  admin: 'orçamentos aguardando aprovação e recorrências críticas',
 };
 
 async function quadroPush() {

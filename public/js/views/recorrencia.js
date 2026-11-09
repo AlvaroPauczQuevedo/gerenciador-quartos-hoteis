@@ -7,7 +7,7 @@ export async function mostrar(el, _p, query) {
   const M = estado.meta;
   const rede = ehRede();
   const criticos = r.alertas.filter((a) => a.nivel === 'critico');
-  const podeCronico = papel('gerente', 'governanta', 'admin', 'manutencao_chefe', 'diretoria');
+  const podeCronico = papel('gerente', 'governanta', 'admin', 'diretoria');
 
   render(el, html`
     <div class="cabecalho"><div><h1>Índice de recorrência de problemas</h1>

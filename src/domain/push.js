@@ -16,12 +16,10 @@ const deB64u = (s) => Buffer.from(String(s), 'base64url');
 // ---------- quem recebe push de quê (as notificações internas continuam para todos) ----------
 export const REGRAS = {
   tecnico: ['designacao', 'correcao', 'prazo_proximo', 'atrasada', 'reaberta'],
-  manutencao_chefe: ['nova_demanda', 'atrasada', 'materiais', 'reaberta', 'correcao', 'aprovada', 'recusada'],
-  gerente: ['concluida', 'quarto_bloqueado', 'devolvida', 'recusada', 'recorrencia'],
+  gerente: ['nova_demanda', 'concluida', 'quarto_bloqueado', 'devolvida', 'recusada', 'recorrencia', 'atrasada', 'materiais', 'reaberta', 'correcao', 'orcamento'],
   governanta: ['inspecao_vencida', 'devolvida', 'concluida', 'recusada'],
-  aprovador_financeiro: ['orcamento'],
   diretoria: ['orcamento', 'recorrencia'],
-  admin: ['recorrencia'],
+  admin: ['orcamento', 'recorrencia'],
 };
 
 // Horário de silêncio no fuso dos hotéis (SC, RS e SP compartilham o horário de Brasília).

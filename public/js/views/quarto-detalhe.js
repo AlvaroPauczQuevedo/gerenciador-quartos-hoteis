@@ -23,7 +23,7 @@ export async function mostrar(el, [id]) {
   const M = estado.meta;
   const abertas = q.os.filter((o) => !M.STATUS_FINAIS.includes(o.status));
   const podeGerir = papel('gerente', 'admin', 'diretoria');
-  const podeInspecionar = papel('governanta', 'gerente', 'admin', 'manutencao_chefe');
+  const podeInspecionar = papel('governanta', 'gerente', 'admin');
   const podePadrao = papel('governanta', 'gerente', 'admin');
 
   render(el, html`
@@ -34,12 +34,12 @@ export async function mostrar(el, [id]) {
           <span class="muted">${q.tipo || ''}${q.andar ? ` · ${q.andar}º andar` : ''}</span>
           ${q.inspecao_vencida ? html`<span class="badge danger">Inspeção vencida</span>` : ''}</div></div>
       <div class="acoes-topo">
-        ${papel('gerente', 'governanta', 'admin', 'manutencao_chefe') ? html`<a class="btn primario" href="#/os/nova?quarto_id=${q.id}&hotel_id=${q.hotel_id}">+ Solicitar manutenção</a>` : ''}
+        ${papel('gerente', 'governanta', 'admin') ? html`<a class="btn primario" href="#/os/nova?quarto_id=${q.id}&hotel_id=${q.hotel_id}">+ Solicitar manutenção</a>` : ''}
         ${podeGerir && !papel('diretoria') ? html`<button class="btn" id="editar-quarto">Editar</button>` : ''}
         <a class="btn" href="#/qrcodes?hotel_id=${q.hotel_id}" title="Etiquetas de QR code para a porta">▦ QR code</a>
         ${podeInspecionar ? html`<button class="btn" id="inspecionar">Inspecionar agora</button>` : ''}
         ${q.status_comercial === 'bloqueado' && podeGerir ? html`<button class="btn sucesso" id="liberar">Liberar para comercialização</button>` : ''}
-        ${q.status_comercial === 'liberado' && papel('gerente', 'admin', 'manutencao_chefe', 'diretoria') ? html`<button class="btn perigo" id="bloquear">Bloquear</button>` : ''}
+        ${q.status_comercial === 'liberado' && papel('gerente', 'admin', 'diretoria') ? html`<button class="btn perigo" id="bloquear">Bloquear</button>` : ''}
       </div>
     </div>
     <div class="kpis">
@@ -99,15 +99,15 @@ export async function mostrar(el, [id]) {
           ${q.cronicos.length ? html`<ul class="lista-simples">${q.cronicos.map((c) => html`<li>
             <span class="badge ${c.status === 'ativo' ? 'warn' : 'ok'}">${c.status === 'ativo' ? 'Ativo' : 'Resolvido'}</span> <strong>${M.CATEGORIAS[c.categoria]}</strong>${c.equipamento_tipo ? ` · ${c.equipamento_tipo}` : ''}
             <div class="small">${c.descricao}</div><div class="muted small">Origem: ${c.origem} · ${c.criado_por_nome} · ${data(c.criado_em)}</div>
-            ${c.status === 'ativo' && papel('gerente', 'admin', 'manutencao_chefe', 'diretoria') ? html`<button class="btn pequeno" data-resolver="${c.id}" style="margin-top:.3rem">Marcar como resolvido</button>` : ''}</li>`)}</ul>` : html`<p class="muted small">Nenhum problema crônico.</p>`}
+            ${c.status === 'ativo' && papel('gerente', 'admin', 'diretoria') ? html`<button class="btn pequeno" data-resolver="${c.id}" style="margin-top:.3rem">Marcar como resolvido</button>` : ''}</li>`)}</ul>` : html`<p class="muted small">Nenhum problema crônico.</p>`}
         </section>
         <section class="card">
-          <div class="card-titulo"><h2>Equipamentos</h2>${papel('gerente', 'admin', 'manutencao_chefe') ? html`<button class="btn pequeno" id="add-equip">+ Adicionar</button>` : ''}</div>
+          <div class="card-titulo"><h2>Equipamentos</h2>${papel('gerente', 'admin') ? html`<button class="btn pequeno" id="add-equip">+ Adicionar</button>` : ''}</div>
           <ul class="lista-simples">${q.equipamentos.map((e) => {
             const falhas = q.os.filter((o) => o.equipamento_id === e.id && !['cancelada', 'recusada'].includes(o.status)).length;
             return html`<li style="display:flex;justify-content:space-between;gap:.5rem;align-items:center"><span>${e.tipo}${e.descricao ? html` <span class="muted small">(${e.descricao})</span>` : ''}
               ${falhas ? html` <span class="badge ${falhas >= 3 ? 'danger' : falhas >= 2 ? 'warn' : ''}">${falhas} falha(s)</span>` : ''}<br><span class="muted small">Instalado em ${data(e.instalado_em)}</span></span>
-              ${papel('gerente', 'admin', 'manutencao_chefe') ? html`<button class="btn pequeno" data-substituir="${e.id}" data-tipo="${e.tipo}" title="Registrar substituição do equipamento">Substituir</button>` : ''}</li>`;
+              ${papel('gerente', 'admin') ? html`<button class="btn pequeno" data-substituir="${e.id}" data-tipo="${e.tipo}" title="Registrar substituição do equipamento">Substituir</button>` : ''}</li>`;
           })}</ul>
         </section>
         <section class="card">

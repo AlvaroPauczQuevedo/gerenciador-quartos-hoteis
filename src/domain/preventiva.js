@@ -8,7 +8,7 @@ import { agoraIso, somarDias, exigir, exigirHotel, exigirPapel, filtroHotel, tex
 import { notificar, equipeManutencao } from './notificacoes.js';
 import * as os from './os.js';
 
-const PAPEIS = ['admin', 'gerente', 'manutencao_chefe'];
+const PAPEIS = ['admin', 'gerente'];
 const FINAIS_SQL = STATUS_FINAIS.map((s) => `'${s}'`).join(',');
 const MAX_POR_RODADA = 60; // por plano, para não travar o sistema numa geração grande
 
@@ -103,10 +103,10 @@ export function listar(db, usuario, { hotel_id } = {}, agora) {
 
 function autorDoPlano(db, plano) {
   const criador = um(db, `SELECT id, nome, papel, hotel_id FROM usuarios WHERE id = ? AND ativo = 1 AND excluido_em IS NULL
-    AND papel IN ('admin', 'gerente', 'manutencao_chefe')`, plano.criado_por);
+    AND papel IN ('admin', 'gerente')`, plano.criado_por);
   if (criador) return criador;
   return um(db, `SELECT id, nome, papel, hotel_id FROM usuarios WHERE ativo = 1 AND excluido_em IS NULL
-    AND ((papel IN ('gerente', 'manutencao_chefe') AND hotel_id = ?) OR papel = 'admin') ORDER BY papel = 'admin', id LIMIT 1`, plano.hotel_id);
+    AND ((papel = 'gerente' AND hotel_id = ?) OR papel = 'admin') ORDER BY papel = 'admin', id LIMIT 1`, plano.hotel_id);
 }
 
 // Executado pelo agendador: gera as OS preventivas vencidas.

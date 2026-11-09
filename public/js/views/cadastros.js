@@ -14,7 +14,7 @@ export async function mostrar(el, _p, query = {}) {
   const admin = estado.usuario.papel === 'admin';
   const hotelChecklist = hoteis.find((h) => h.id === checklist.hotel_id);
   // Perfis que o gerente pode atribuir (a regra vale também no servidor).
-  const papeisPermitidos = admin ? M.PAPEIS : Object.fromEntries(Object.entries(M.PAPEIS).filter(([k]) => ['gerente', 'governanta', 'manutencao_chefe', 'tecnico', 'aprovador_financeiro'].includes(k)));
+  const papeisPermitidos = admin ? M.PAPEIS : Object.fromEntries(Object.entries(M.PAPEIS).filter(([k]) => ['gerente', 'governanta', 'tecnico'].includes(k)));
   const optsHoteis = Object.fromEntries(hoteis.map((h) => [h.id, h.nome]));
 
   render(el, html`
@@ -25,7 +25,7 @@ export async function mostrar(el, _p, query = {}) {
             <td class="num">${h.total_quartos}${h.quartos_provisorios ? html`<br><span class="badge warn sem-ponto">${h.quartos_provisorios} provisórios</span>` : !h.total_quartos ? html`<br><span class="badge danger sem-ponto">cadastrar</span>` : ''}</td><td><label class="check"><input type="checkbox" data-validacao="${h.id}" ${h.exige_validacao ? raw('checked') : ''}> exigida</label></td>
             <td><input type="number" min="0" step="50" style="max-width:9rem" data-config="limite_aprovacao_gerente" data-hotel="${h.id}" value="${h.limite_aprovacao_gerente || 0}"></td>
             <td><input type="number" min="0" step="100" style="max-width:9rem" data-config="orcamento_mensal" data-hotel="${h.id}" value="${h.orcamento_mensal ?? ''}" placeholder="não definido"></td></tr>`)}</tbody></table></div>
-        <p class="small muted">"Gerente aprova até": orçamentos de manutenção até esse valor são aprovados pelo gerente do hotel; acima, pelo aprovador financeiro da rede (0 = sempre a rede).</p>
+        <p class="small muted">"Gerente aprova até": orçamentos de manutenção até esse valor são aprovados pelo gerente do hotel; acima, pela diretoria ou administração da rede (0 = sempre a rede).</p>
         <form class="form" id="f-hotel" style="margin-top:1rem"><h3>Nova unidade</h3><div class="form-grade" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr))">
           <label class="campo"><span class="obrig">Nome</span><input name="nome" required></label>
           <label class="campo"><span>Cidade</span><input name="cidade"></label></div>

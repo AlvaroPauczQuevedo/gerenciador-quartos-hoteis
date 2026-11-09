@@ -33,10 +33,8 @@ beforeEach(() => {
   u = {
     admin: usuario('Admin', 'admin', null),
     diretoria: usuario('Dir', 'diretoria', null),
-    fin: usuario('Fin', 'aprovador_financeiro', null),
     gerente: usuario('Gerente', 'gerente', h1),
     gov: usuario('Gov', 'governanta', h1),
-    chefe: usuario('Chefe', 'manutencao_chefe', h1),
     tec: usuario('Tec', 'tecnico', h1),
     gerente2: usuario('Gerente2', 'gerente', h2),
     tec2: usuario('Tec2', 'tecnico', h2),
@@ -51,8 +49,8 @@ const abrir = (extra = {}, t = T0) => os.criar(db, u.gerente, {
 }, t);
 
 function cicloCompleto(id, t) {
-  os.executarAcao(db, u.chefe, id, 'receber', {}, somarHoras(t, 1));
-  os.executarAcao(db, u.chefe, id, 'aceitar', { responsavel_id: u.tec.id }, somarHoras(t, 2));
+  os.executarAcao(db, u.gerente, id, 'receber', {}, somarHoras(t, 1));
+  os.executarAcao(db, u.gerente, id, 'aceitar', { responsavel_id: u.tec.id }, somarHoras(t, 2));
   os.executarAcao(db, u.tec, id, 'iniciar', {}, somarHoras(t, 3));
   os.executarAcao(db, u.tec, id, 'registrar_custo', { tipo: 'material', descricao: 'Gás', valor: 200 }, somarHoras(t, 4));
   fotos.salvar(db, u.tec, { os_id: id, fase: 'depois', arquivo: PNG }, ctx, somarHoras(t, 5));
@@ -60,14 +58,16 @@ function cicloCompleto(id, t) {
   os.executarAcao(db, u.gerente, id, 'validar', { liberar_quarto: true }, somarHoras(t, 6));
 }
 
-test('abertura gera protocolo único, prazo pela prioridade e notifica a manutenção', () => {
+test('abertura gera protocolo único, prazo pela prioridade e notifica o gerente (que distribui aos técnicos)', () => {
   const a = os.buscar(db, abrir());
   const b = os.buscar(db, abrir());
   assert.equal(a.protocolo, 'OS-2026-00001');
   assert.equal(b.protocolo, 'OS-2026-00002');
   assert.equal(a.status, 'nova');
   assert.equal(a.prazo_previsto, somarHoras(T0, 24));
-  assert.ok(um(db, "SELECT 1 AS x FROM notificacoes WHERE usuario_id = ? AND tipo = 'nova_demanda'", u.chefe.id));
+  os.criar(db, u.gov, { quarto_id: quarto, local: 'quarto', categoria: 'eletrica', prioridade: 'media', descricao: 'Tomada do quarto sem energia.' }, T0);
+  assert.ok(um(db, "SELECT 1 AS x FROM notificacoes WHERE usuario_id = ? AND tipo = 'nova_demanda'", u.gerente.id));
+  assert.ok(!um(db, "SELECT 1 AS x FROM notificacoes WHERE usuario_id = ? AND tipo = 'nova_demanda'", u.tec.id), 'técnico só recebe o que for distribuído');
 });
 
 test('fluxo completo registra quem abriu, recebeu, executou e validou e atualiza o histórico do quarto', () => {
@@ -76,7 +76,7 @@ test('fluxo completo registra quem abriu, recebeu, executou e validou e atualiza
   cicloCompleto(id, T0);
   const o = os.buscar(db, id);
   assert.equal(o.status, 'encerrada');
-  assert.deepEqual([o.aberto_por, o.recebido_por, o.executado_por, o.validado_por], [u.gerente.id, u.chefe.id, u.tec.id, u.gerente.id]);
+  assert.deepEqual([o.aberto_por, o.recebido_por, o.executado_por, o.validado_por], [u.gerente.id, u.gerente.id, u.tec.id, u.gerente.id]);
   const q = quartos.detalhe(db, u.gerente, quarto);
   assert.equal(q.status_comercial, 'liberado');
   assert.ok(q.historico.some((h) => h.tipo === 'manutencao' && h.os_id === id));
@@ -85,8 +85,8 @@ test('fluxo completo registra quem abriu, recebeu, executou e validou e atualiza
 
 test('conclusão exige evidência fotográfica', () => {
   const id = abrir();
-  os.executarAcao(db, u.chefe, id, 'receber', {}, T0);
-  os.executarAcao(db, u.chefe, id, 'aceitar', { responsavel_id: u.tec.id }, T0);
+  os.executarAcao(db, u.gerente, id, 'receber', {}, T0);
+  os.executarAcao(db, u.gerente, id, 'aceitar', { responsavel_id: u.tec.id }, T0);
   os.executarAcao(db, u.tec, id, 'iniciar', {}, T0);
   assert.throws(() => os.executarAcao(db, u.tec, id, 'concluir', { texto: 'ok' }, T0), /fotografia/);
 });
@@ -102,8 +102,8 @@ test('permissões: técnico não aceita, gerente de outro hotel não acessa, aç
 
 test('reavaliação de prioridade exige justificativa e fica no histórico', () => {
   const id = abrir();
-  assert.throws(() => os.executarAcao(db, u.chefe, id, 'reavaliar_prioridade', { prioridade: 'baixa' }, T0), /justificativa/);
-  os.executarAcao(db, u.chefe, id, 'reavaliar_prioridade', { prioridade: 'baixa', texto: 'Quarto tem outro aparelho' }, T0);
+  assert.throws(() => os.executarAcao(db, u.gerente, id, 'reavaliar_prioridade', { prioridade: 'baixa' }, T0), /justificativa/);
+  os.executarAcao(db, u.gerente, id, 'reavaliar_prioridade', { prioridade: 'baixa', texto: 'Quarto tem outro aparelho' }, T0);
   const o = os.detalhe(db, u.gerente, id);
   assert.equal(o.prioridade, 'baixa');
   assert.equal(o.prioridade_original, 'alta');
@@ -112,12 +112,12 @@ test('reavaliação de prioridade exige justificativa e fica no histórico', () 
 
 test('aprovação financeira bloqueia execução normal, mas não a emergencial', () => {
   const id = abrir();
-  os.executarAcao(db, u.chefe, id, 'receber', {}, T0);
-  os.executarAcao(db, u.chefe, id, 'enviar_aprovacao', { valor: 3000, descricao: 'Troca do aparelho' }, T0);
+  os.executarAcao(db, u.gerente, id, 'receber', {}, T0);
+  os.executarAcao(db, u.gerente, id, 'enviar_aprovacao', { valor: 3000, descricao: 'Troca do aparelho' }, T0);
   assert.equal(os.buscar(db, id).status, 'aguardando_autorizacao');
   assert.throws(() => os.executarAcao(db, u.tec, id, 'iniciar', {}, T0), (e) => e.status === 403);
-  assert.ok(um(db, "SELECT 1 AS x FROM notificacoes WHERE usuario_id = ? AND tipo = 'orcamento'", u.fin.id));
-  os.executarAcao(db, u.fin, id, 'autorizar', {}, T0);
+  assert.ok(um(db, "SELECT 1 AS x FROM notificacoes WHERE usuario_id = ? AND tipo = 'orcamento'", u.diretoria.id));
+  os.executarAcao(db, u.diretoria, id, 'autorizar', {}, T0);
   assert.equal(os.buscar(db, id).status, 'aprovada');
 
   const em = abrir({ prioridade: 'emergencial', categoria: 'hidraulica', equipamento_id: null, local: 'banheiro', descricao: 'Vazamento forte no banheiro.' });
@@ -135,7 +135,7 @@ test('validação: correção e reabertura', () => {
   let o = os.buscar(db, id);
   assert.equal(o.status, 'em_avaliacao');
   assert.equal(o.reaberturas, 1);
-  os.executarAcao(db, u.chefe, id, 'aceitar', {}, somarDias(T0, 2));
+  os.executarAcao(db, u.gerente, id, 'aceitar', {}, somarDias(T0, 2));
   os.executarAcao(db, u.tec, id, 'iniciar', {}, somarDias(T0, 2));
   os.executarAcao(db, u.tec, id, 'concluir', { texto: 'Dreno trocado' }, somarDias(T0, 3));
   os.executarAcao(db, u.gerente, id, 'solicitar_correcao', { texto: 'Acabamento ruim' }, somarDias(T0, 3));
@@ -147,8 +147,8 @@ test('validação: correção e reabertura', () => {
 test('hotel sem exigência de validação encerra direto na conclusão', () => {
   exec(db, 'UPDATE hoteis SET exige_validacao = 0');
   const id = abrir();
-  os.executarAcao(db, u.chefe, id, 'receber', {}, T0);
-  os.executarAcao(db, u.chefe, id, 'aceitar', { responsavel_id: u.tec.id }, T0);
+  os.executarAcao(db, u.gerente, id, 'receber', {}, T0);
+  os.executarAcao(db, u.gerente, id, 'aceitar', { responsavel_id: u.tec.id }, T0);
   os.executarAcao(db, u.tec, id, 'iniciar', {}, T0);
   fotos.salvar(db, u.tec, { os_id: id, fase: 'depois', arquivo: PNG }, ctx, T0);
   os.executarAcao(db, u.tec, id, 'concluir', { texto: 'ok' }, T0);
@@ -224,14 +224,14 @@ test('problema crônico a partir de item de inspeção', () => {
 
 test('agendador: alerta de prazo próximo, atraso e inspeção vencida apenas uma vez', () => {
   const id = abrir();
-  os.executarAcao(db, u.chefe, id, 'receber', {}, T0);
+  os.executarAcao(db, u.gerente, id, 'receber', {}, T0);
   verificar(db, somarHoras(T0, 20));
   verificar(db, somarHoras(T0, 21));
-  assert.equal(um(db, "SELECT COUNT(*) AS n FROM notificacoes WHERE tipo = 'prazo_proximo' AND usuario_id = ?", u.chefe.id).n, 1);
+  assert.equal(um(db, "SELECT COUNT(*) AS n FROM notificacoes WHERE tipo = 'prazo_proximo' AND usuario_id = ?", u.gerente.id).n, 1);
   verificar(db, somarHoras(T0, 30));
   verificar(db, somarHoras(T0, 31));
   assert.equal(um(db, "SELECT COUNT(*) AS n FROM notificacoes WHERE tipo = 'atrasada' AND usuario_id = ?", u.gerente.id).n, 1);
-  assert.equal(os.listar(db, u.chefe, { grupo: 'atrasadas' }, somarHoras(T0, 31)).length, 1);
+  assert.equal(os.listar(db, u.gerente, { grupo: 'atrasadas' }, somarHoras(T0, 31)).length, 1);
   // Quarto novo tem 7 dias para a primeira inspeção.
   assert.ok(!um(db, "SELECT 1 AS x FROM notificacoes WHERE tipo = 'inspecao_vencida' AND usuario_id = ?", u.gov.id));
   verificar(db, somarDias(T0, 8));
@@ -240,8 +240,8 @@ test('agendador: alerta de prazo próximo, atraso e inspeção vencida apenas um
 });
 
 test('liberação do quarto só por gerente/diretoria/admin', () => {
-  quartos.bloquear(db, u.chefe, quarto, { motivo: 'Obra' }, T0);
-  assert.throws(() => quartos.liberar(db, u.chefe, quarto, {}, T0), (e) => e.status === 403);
+  quartos.bloquear(db, u.gerente, quarto, { motivo: 'Obra' }, T0);
+  assert.throws(() => quartos.liberar(db, u.tec, quarto, {}, T0), (e) => e.status === 403);
   quartos.liberar(db, u.gerente, quarto, {}, T0);
   assert.equal(quartos.detalhe(db, u.gerente, quarto).status_comercial, 'liberado');
 });

@@ -19,8 +19,8 @@ export async function mostrar(el) {
     blocos.push(carregar('Meus serviços em andamento', { responsavel_id: 'eu', grupo: 'todas_abertas' }, { link: '#/os?responsavel_id=eu' }));
     blocos.push(carregar('Aprovadas sem responsável (disponíveis)', { grupo: 'aprovadas' }, { link: '#/os?grupo=aprovadas' }));
   }
-  if (p === 'manutencao_chefe' || p === 'admin') {
-    blocos.push(carregar('Novas solicitações recebidas', { grupo: 'novas' }, { link: '#/os?grupo=novas' }));
+  if (p === 'gerente' || p === 'admin') {
+    blocos.push(carregar('Novas solicitações para aceitar e designar', { grupo: 'novas' }, { link: '#/os?grupo=novas' }));
     blocos.push(carregar('Demandas atrasadas', { grupo: 'atrasadas' }, { link: '#/os?grupo=atrasadas' }));
   }
   if (p === 'gerente' || p === 'governanta' || p === 'admin') {
@@ -28,7 +28,7 @@ export async function mostrar(el) {
     blocos.push(carregar('Devolvidas para complementação', { status: 'devolvida_complementacao' }, { link: '#/os?status=devolvida_complementacao' }));
   }
   if (p === 'gerente' || p === 'governanta') blocos.push(carregar('Minhas solicitações em aberto', { aberto_por: 'eu', grupo: 'todas_abertas' }, { link: '#/os?aberto_por=eu' }));
-  if (p === 'aprovador_financeiro' || p === 'diretoria') blocos.push(carregar('Orçamentos aguardando autorização', { grupo: 'autorizacao' }, { link: '#/os?grupo=autorizacao' }));
+  if (p === 'diretoria' || p === 'admin') blocos.push(carregar('Orçamentos aguardando autorização', { grupo: 'autorizacao' }, { link: '#/os?grupo=autorizacao' }));
   if (p === 'diretoria') blocos.push(carregar('Emergenciais em aberto na rede', { prioridade: 'emergencial', grupo: 'todas_abertas' }));
   const listas = await Promise.all(blocos);
   const recorrencia = p !== 'tecnico' && p !== 'governanta' ? await api('/api/recorrencia') : null;
@@ -38,7 +38,7 @@ export async function mostrar(el) {
     <div class="cabecalho">
       <div><h1>Olá, ${u.nome.split(' ')[0]}</h1><p class="sub">${estado.meta.PAPEIS[p]} · ${u.hotel_nome || (estado.hoteis.length === 1 ? estado.hoteis[0].nome : 'Visão consolidada da rede')} · ${new Date().toLocaleDateString('pt-BR', { dateStyle: 'full' })}</p></div>
       <div class="acoes-topo">
-        ${['gerente', 'governanta', 'admin', 'manutencao_chefe'].includes(p) ? html`<a class="btn primario" href="#/os/nova">+ Nova solicitação</a>` : ''}
+        ${['gerente', 'governanta', 'admin'].includes(p) ? html`<a class="btn primario" href="#/os/nova">+ Nova solicitação</a>` : ''}
         ${['gerente', 'governanta', 'admin'].includes(p) ? html`<a class="btn" href="#/inspecoes">Inspeções</a>` : ''}
         ${ehRede() && p !== 'tecnico' ? html`<a class="btn" href="#/rede">Visão da rede</a>` : ''}
       </div>

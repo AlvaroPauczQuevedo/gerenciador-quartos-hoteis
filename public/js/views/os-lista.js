@@ -11,7 +11,7 @@ export async function mostrar(el, _p, query) {
   ]);
   const M = estado.meta;
   const ir = (novo) => { location.hash = `#/os${qs(novo)}`; };
-  const manut = papel('manutencao_chefe', 'tecnico');
+  const manut = papel('tecnico');
 
   render(el, html`
     <div class="cabecalho">
@@ -19,8 +19,8 @@ export async function mostrar(el, _p, query) {
         <p class="sub">Central de ordens de serviço — ${lista.length} resultado(s)</p></div>
       <div class="acoes-topo">
         <a class="btn" href="/api/exportar/demandas.csv${qs(filtros)}" download>⬇ Excel</a>
-        ${papel('tecnico', 'manutencao_chefe') ? html`<button class="btn ${filtros.responsavel_id === 'eu' ? 'primario' : ''}" id="minhas">Minhas (${painel.minhas})</button>` : ''}
-        ${papel('gerente', 'governanta', 'admin', 'manutencao_chefe') ? html`<a class="btn primario" href="#/os/nova">+ Nova solicitação</a>` : ''}
+        ${papel('tecnico') ? html`<button class="btn ${filtros.responsavel_id === 'eu' ? 'primario' : ''}" id="minhas">Minhas (${painel.minhas})</button>` : ''}
+        ${papel('gerente', 'governanta', 'admin') ? html`<a class="btn primario" href="#/os/nova">+ Nova solicitação</a>` : ''}
       </div>
     </div>
     <nav class="abas" aria-label="Situação">

@@ -60,11 +60,12 @@ test('regras por perfil e horário de silêncio (emergência sempre passa)', () 
   assert.equal(push.devePushar('tecnico', 'designacao', { agora: dia }), true);
   assert.equal(push.devePushar('tecnico', 'comentario', { agora: dia }), false);
   assert.equal(push.devePushar('gerente', 'concluida', { agora: dia }), true);
-  assert.equal(push.devePushar('gerente', 'nova_demanda', { agora: dia }), false);
+  assert.equal(push.devePushar('gerente', 'nova_demanda', { agora: dia }), true);
+  assert.equal(push.devePushar('governanta', 'nova_demanda', { agora: dia }), false);
   assert.equal(push.devePushar('gerente', 'nova_demanda', { emergencial: true, agora: noite }), true);
   assert.equal(push.devePushar('tecnico', 'designacao', { agora: noite }), false);
   assert.equal(push.devePushar('tecnico', 'designacao', { emergencial: true, agora: noite }), true);
-  assert.equal(push.devePushar('aprovador_financeiro', 'orcamento', { agora: dia }), true);
+  assert.equal(push.devePushar('diretoria', 'orcamento', { agora: dia }), true);
 });
 
 test('só aceita endpoints de serviços de push reais', () => {
@@ -88,7 +89,7 @@ function cenario() {
 
 test('fila de push: envia após o commit e descarta em caso de erro (rollback)', async () => {
   const { db, sel, inscricao } = cenario();
-  const ger = sel('gerencia'); const chefe = sel('manutencao');
+  const ger = sel('governanca'); const chefe = sel('gerencia');
   push.inscrever(db, chefe, inscricao(1));
   const q = um(db, "SELECT id FROM quartos WHERE numero = '402'");
   const chamadas = [];

@@ -406,6 +406,27 @@ function migrar(db) {
   if (!colHoteis.includes('orcamento_mensal')) db.exec('ALTER TABLE hoteis ADD COLUMN orcamento_mensal REAL');
   const colOs = db.prepare('PRAGMA table_info(ordens_servico)').all().map((c) => c.name);
   if (!colOs.includes('plano_preventiva_id')) db.exec('ALTER TABLE ordens_servico ADD COLUMN plano_preventiva_id INTEGER');
+  removerAprovadorFinanceiro(db);
+  removerChefeManutencao(db);
+}
+
+// O perfil "Responsável pela manutenção" deixou de existir: o gerente distribui direto para os técnicos.
+// Contas desse perfil viram técnicos (mantêm login, senha e histórico).
+function removerChefeManutencao(db) {
+  db.prepare("UPDATE usuarios SET papel = 'tecnico' WHERE papel = 'manutencao_chefe'").run();
+}
+
+// O perfil "Aprovador financeiro" deixou de existir (orçamentos acima da alçada do gerente vão para
+// diretoria/administração). Contas desse perfil perdem o acesso; o nome continua no histórico das OS.
+function removerAprovadorFinanceiro(db) {
+  const contas = db.prepare("SELECT id FROM usuarios WHERE papel = 'aprovador_financeiro' AND excluido_em IS NULL").all();
+  const agora = new Date().toISOString();
+  for (const { id } of contas) {
+    db.prepare('DELETE FROM sessoes WHERE usuario_id = ?').run(id);
+    db.prepare('DELETE FROM push_inscricoes WHERE usuario_id = ?').run(id);
+    db.prepare('DELETE FROM notificacoes WHERE usuario_id = ?').run(id);
+    db.prepare('UPDATE usuarios SET ativo = 0, excluido_em = ?, login = ? WHERE id = ?').run(agora, `excluido-${id}-${Date.now()}`, id);
+  }
 }
 
 // Versões anteriores usavam e-mail (e depois e-mail + login). O login passa a ser a parte do

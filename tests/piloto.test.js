@@ -17,7 +17,7 @@ test('piloto cria apenas o hotel Executive Osório, com senhas únicas e válida
   assert.equal(new Set(cred.map((c) => c.senha)).size, cred.length);
   for (const c of cred) assert.ok(usuarios.login(db, c.login, c.senha));
   assert.throws(() => usuarios.login(db, cred[0].login, 'demo123'), (e) => e.status === 401);
-  assert.deepEqual(cred.map((c) => c.login), ['admin', 'gerencia', 'governanca', 'manutencao', 'tecnico', 'financeiro']);
+  assert.deepEqual(cred.map((c) => c.login), ['admin', 'gerencia', 'governanca', 'tecnico']);
 });
 
 test('troca de senha e cadastro de quartos em lote', () => {
@@ -122,7 +122,7 @@ test('excluir usuário: apaga sem histórico, arquiva com histórico, bloqueia c
   const db = abrirBanco(':memory:');
   popularPiloto(db);
   const sel = (papel) => um(db, 'SELECT id, nome, papel, hotel_id FROM usuarios WHERE papel = ?', papel);
-  const ger = sel('gerente'); const admin = sel('admin'); const chefe = sel('manutencao_chefe'); const tec = sel('tecnico');
+  const ger = sel('gerente'); const admin = sel('admin'); const chefe = ger; const tec = sel('tecnico');
 
   // Sem histórico: removido de vez.
   const novo = usuarios.criarUsuario(db, ger, { nome: 'Temporário', login: 'temp', papel: 'tecnico', senha: 'senhaBoa123' });
@@ -138,7 +138,8 @@ test('excluir usuário: apaga sem histórico, arquiva com histórico, bloqueia c
   os.executarAcao(db, tec, id, 'comentar', { texto: 'Vou verificar amanhã.' });
 
   // Com histórico e sem OS em aberto: arquivado, nome mantido, nome de usuário liberado, sem login.
-  os.executarAcao(db, chefe, id, 'designar', { responsavel_id: chefe.id });
+  const tec2 = usuarios.criarUsuario(db, ger, { nome: 'Outro técnico', login: 'tecnico2', papel: 'tecnico', senha: 'senhaBoa123' });
+  os.executarAcao(db, chefe, id, 'designar', { responsavel_id: tec2 });
   const loginTec = um(db, 'SELECT login FROM usuarios WHERE id = ?', tec.id).login;
   assert.equal(usuarios.excluirUsuario(db, ger, tec.id).modo, 'arquivado');
   assert.equal(um(db, 'SELECT nome FROM usuarios WHERE id = ?', tec.id).nome, tec.nome);

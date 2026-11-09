@@ -4,10 +4,8 @@ import { html, render, $, $$ } from '../ui.js';
 // Atalhos exibidos apenas quando o banco foi criado com `npm run seed:demo`.
 const DEMO = [
   ['gerente.atlantico', 'Gerente', 'Hotel Atlântico'],
-  ['manutencao.atlantico', 'Resp. manutenção', 'Hotel Atlântico'],
   ['tecnico1.atlantico', 'Técnico', 'Hotel Atlântico'],
   ['governanta.atlantico', 'Governanta', 'Hotel Atlântico'],
-  ['financeiro', 'Aprovador financeiro', 'Rede'],
   ['diretoria', 'Diretoria', 'Rede'],
   ['admin', 'Administrador', 'Rede'],
 ];

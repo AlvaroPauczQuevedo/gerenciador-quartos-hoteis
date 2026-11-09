@@ -6,7 +6,7 @@ import * as os from './os.js';
 import { registrarHistorico } from './quartos.js';
 import { listarPadrao } from './fotos.js';
 
-const PAPEIS_INSPECAO = ['governanta', 'gerente', 'admin', 'manutencao_chefe'];
+const PAPEIS_INSPECAO = ['governanta', 'gerente', 'admin'];
 const FINAIS_SQL = STATUS_FINAIS.map((s) => `'${s}'`).join(',');
 
 export function criar(db, usuario, { quarto_id }, agora) {
@@ -129,7 +129,7 @@ export function registrarCronico(db, usuario, dados, agora) {
 }
 
 export function resolverCronico(db, usuario, id, agora) {
-  exigirPapel(usuario, 'gerente', 'admin', 'manutencao_chefe', 'diretoria');
+  exigirPapel(usuario, 'gerente', 'admin', 'diretoria');
   const c = um(db, 'SELECT * FROM problemas_cronicos WHERE id = ?', Number(id));
   exigir(c, 'Problema crônico não encontrado.', 404);
   exigirHotel(usuario, c.hotel_id);

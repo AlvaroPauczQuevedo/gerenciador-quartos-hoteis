@@ -71,7 +71,7 @@ export function atualizarHotel(db, usuario, id, dados) {
 
 // O gerente administra a equipe do próprio hotel. Acessos da rede (administrador geral e
 // diretoria, que enxergam todos os hotéis) só podem ser geridos pelo administrador.
-export const PAPEIS_DO_GERENTE = ['gerente', 'governanta', 'manutencao_chefe', 'tecnico', 'aprovador_financeiro'];
+export const PAPEIS_DO_GERENTE = ['gerente', 'governanta', 'tecnico'];
 
 export function podeGerenciar(usuario, alvo) {
   if (usuario.papel === 'admin') return true;

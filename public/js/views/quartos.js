@@ -58,7 +58,7 @@ export async function mostrar(el, _p, query) {
     <div class="cabecalho"><div><h1>Quartos${hotelAtual ? html` <span class="muted" style="font-weight:400">· ${hotelAtual.nome}</span>` : ''}</h1>
       <p class="sub">${lista.length} quarto(s) · ${lib} liberado(s) para comercialização · ${lista.length - lib} bloqueado(s)</p></div>
       <div class="acoes-topo">${hotelAtual ? html`<button class="btn" id="voltar-rede">← Todos os hotéis</button>` : ''}
-        ${papel('admin', 'gerente', 'governanta', 'manutencao_chefe') && (!rede || query.hotel_id) ? html`<a class="btn" href="#/qrcodes${qs({ hotel_id: query.hotel_id })}">▦ QR codes</a>` : ''}
+        ${papel('admin', 'gerente', 'governanta') && (!rede || query.hotel_id) ? html`<a class="btn" href="#/qrcodes${qs({ hotel_id: query.hotel_id })}">▦ QR codes</a>` : ''}
         <a class="btn" href="/api/exportar/quartos.csv${qs({ ...query, aba: '' })}" download>⬇ Excel</a></div></div>
     ${provisorios && !hoteis ? html`<div class="aviso warn" style="margin-bottom:1rem"><span class="icone">!</span><div>
       <strong>${provisorios} quarto(s) com numeração provisória</strong> (criados só pela quantidade: 1, 2, 3…).

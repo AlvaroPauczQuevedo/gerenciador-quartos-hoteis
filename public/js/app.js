@@ -31,12 +31,12 @@ function menu() {
   const itens = [];
   const add = (rota, rotulo, grupo = 'Operação') => itens.push({ rota, rotulo, grupo });
   add('#/inicio', p === 'tecnico' ? 'Meus serviços' : 'Início');
-  if (['gerente', 'governanta', 'admin', 'manutencao_chefe'].includes(p)) add('#/os/nova', 'Nova solicitação');
-  add('#/os', p === 'manutencao_chefe' || p === 'tecnico' ? 'Painel da manutenção' : 'Demandas (OS)');
+  if (['gerente', 'governanta', 'admin'].includes(p)) add('#/os/nova', 'Nova solicitação');
+  add('#/os', p === 'tecnico' ? 'Painel da manutenção' : 'Demandas (OS)');
   add('#/quartos', 'Quartos');
-  if (['gerente', 'governanta', 'admin', 'manutencao_chefe'].includes(p)) add('#/inspecoes', 'Inspeções');
-  if (['gerente', 'admin', 'manutencao_chefe'].includes(p)) add('#/preventiva', 'Preventiva');
-  if (['gerente', 'admin', 'manutencao_chefe'].includes(p)) add('#/estoque', 'Estoque');
+  if (['gerente', 'governanta', 'admin'].includes(p)) add('#/inspecoes', 'Inspeções');
+  if (['gerente', 'admin'].includes(p)) add('#/preventiva', 'Preventiva');
+  if (['gerente', 'admin'].includes(p)) add('#/estoque', 'Estoque');
   if (p !== 'tecnico' && p !== 'governanta') {
     add('#/indicadores', 'Indicadores', 'Gestão');
     add('#/recorrencia', 'Recorrência', 'Gestão');

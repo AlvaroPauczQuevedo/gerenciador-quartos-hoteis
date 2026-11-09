@@ -70,9 +70,7 @@ npm start          # http://localhost:3000
   | Administrador geral da rede (vê todos os hotéis, inclusive os futuros) | `admin` |
   | Gerente (equipe, quartos e checklist do hotel) | `gerencia` |
   | Governança (inspeções) | `governanca` |
-  | Responsável pela manutenção | `manutencao` |
   | Técnico de manutenção | `tecnico` |
-  | Aprovador financeiro | `financeiro` |
 
 - **Apartamentos já cadastrados:** 401–421, 501–521, 601–621, 701–721 e 801–821 (105 no total). Cada um tem 10 equipamentos: ar-condicionado, TV, controle, secador, chuveiro, frigobar, telefone, campainha, fechadura eletrônica e economizador de energia. A primeira inspeção vence em 7 dias.
 - **Checklist da gerência** (31 itens), em dois grupos:
@@ -82,7 +80,7 @@ npm start          # http://localhost:3000
   Ao concluir uma inspeção com a opção automática marcada, o sistema faz isso sozinho. O administrador ajusta o checklist em **Cadastros → Checklist de inspeção** (adiciona itens, ativa/desativa) e cadastra outros quartos em **Cadastrar quartos em lote**.
 - **Fotos padrão do quarto:** na página de cada quarto, gerência e governança cadastram fotos de referência de como o apartamento deve estar montado. A mesma foto pode ser aplicada ao quarto, ao andar inteiro ou a todos os quartos (o arquivo é enviado uma vez só). As fotos aparecem na inspeção, para comparar, e nas OS do quarto.
 - **Login por nome de usuário** (não por e-mail): letras minúsculas, números, ponto, hífen ou sublinhado, de 3 a 30 caracteres (ex.: `joao.silva`). O sistema não usa e-mail. Bancos de versões anteriores são convertidos automaticamente na inicialização (o usuário passa a ser a parte do antigo e-mail antes do @), mantendo as senhas e o histórico.
-- **Usuários:** o gerente, em **Equipe e cadastros**, cria, desativa e redefine a senha da equipe do hotel (gerentes, governança, manutenção, técnicos e financeiro). Ele não pode criar nem alterar acessos da rede (administrador geral e diretoria), que só o administrador gerencia. Excluir um usuário remove o acesso; se ele já participou de demandas ou inspeções, o nome continua no histórico (rastreabilidade). Quem é responsável por demandas em aberto só pode ser excluído depois que elas forem redesignadas.
+- **Usuários:** o gerente, em **Equipe e cadastros**, cria, desativa e redefine a senha da equipe do hotel (gerentes, governança, manutenção, técnicos). Ele não pode criar nem alterar acessos da rede (administrador geral e diretoria), que só o administrador gerencia. Excluir um usuário remove o acesso; se ele já participou de demandas ou inspeções, o nome continua no histórico (rastreabilidade). Quem é responsável por demandas em aberto só pode ser excluído depois que elas forem redesignadas.
 - Com apenas um hotel, a interface esconde os seletores de unidade e a "Visão da rede".
 - O login bloqueia o IP por 15 minutos após 10 tentativas erradas.
 - Se o banco estiver vazio, o `npm start` também cria o piloto e as credenciais automaticamente.

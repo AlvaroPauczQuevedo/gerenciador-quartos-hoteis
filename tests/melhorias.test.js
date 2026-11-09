@@ -65,7 +65,7 @@ test('backup diário: um por dia, consistente, retenção e nomes protegidos', a
 
 test('preventiva: datas distribuídas, gera só o que venceu e não acumula OS abertas', () => {
   const { db, sel } = cenario();
-  const chefe = sel('manutencao');
+  const chefe = sel('gerencia');
   const planoId = preventiva.criarPlano(db, chefe, {
     nome: 'Limpeza do ar-condicionado', categoria: 'ar_condicionado', local: 'quarto', equipamento: 'Ar-condicionado',
     periodicidade_dias: 90, prioridade: 'baixa', inicio_em: T0,
@@ -98,7 +98,7 @@ test('preventiva: datas distribuídas, gera só o que venceu e não acumula OS a
 
 test('estoque: custo médio, saída na OS lança custo, mínimo avisa uma vez', () => {
   const { db, sel } = cenario();
-  const chefe = sel('manutencao'); const ger = sel('gerencia');
+  const ger = sel('gerencia'); const chefe = ger;
   const item = estoque.salvarItem(db, chefe, { nome: 'Lâmpada LED 9W', unidade: 'un', minimo: 5 });
   estoque.movimentar(db, chefe, item, { tipo: 'entrada', quantidade: 10, custo_unitario: 10 }, T0);
   estoque.movimentar(db, chefe, item, { tipo: 'entrada', quantidade: 10, custo_unitario: 14 }, T0);
@@ -114,22 +114,24 @@ test('estoque: custo médio, saída na OS lança custo, mínimo avisa uma vez', 
   assert.throws(() => estoque.movimentar(db, sel('gerencia.canela'), item, { tipo: 'saida', quantidade: 1 }), (e) => e.status === 403);
 });
 
-test('alçada: gerente aprova orçamento até o limite do hotel; acima, só o aprovador', () => {
+test('alçada: gerente aprova orçamento até o limite do hotel; acima, só diretoria/administração', () => {
   const { db, sel } = cenario();
-  const ger = sel('gerencia'); const chefe = sel('manutencao'); const admin = sel('admin');
+  const ger = sel('gerencia'); const chefe = ger; const admin = sel('admin');
   usuarios.atualizarHotel(db, admin, ger.hotel_id, { limite_aprovacao_gerente: 500, orcamento_mensal: 10000 });
   const q = um(db, "SELECT id FROM quartos WHERE numero = '601'");
   const abrir = () => os.criar(db, ger, { quarto_id: q.id, local: 'quarto', categoria: 'mobiliario', prioridade: 'media', descricao: 'Cadeira da bancada quebrada' }, T0);
   const pequena = abrir();
   os.executarAcao(db, chefe, pequena, 'receber', {}, T0);
   os.executarAcao(db, chefe, pequena, 'enviar_aprovacao', { valor: 400, descricao: 'Cadeira nova' }, T0);
-  assert.ok(um(db, "SELECT 1 AS x FROM notificacoes WHERE usuario_id = ? AND tipo = 'orcamento'", ger.id), 'gerente é avisado');
   os.executarAcao(db, ger, pequena, 'autorizar', {}, T0);
   assert.equal(os.buscar(db, pequena).status, 'aprovada');
   const grande = abrir();
   os.executarAcao(db, chefe, grande, 'receber', {}, T0);
   os.executarAcao(db, chefe, grande, 'enviar_aprovacao', { valor: 600, descricao: 'Conjunto completo' }, T0);
   assert.throws(() => os.executarAcao(db, ger, grande, 'autorizar', {}, T0), (e) => e.status === 403);
+  assert.ok(um(db, "SELECT 1 AS x FROM notificacoes WHERE usuario_id = ? AND tipo = 'orcamento' AND os_id = ?", admin.id, grande), 'administração é avisada');
+  os.executarAcao(db, admin, grande, 'autorizar', {}, T0);
+  assert.equal(os.buscar(db, grande).status, 'aprovada');
   os.executarAcao(db, chefe, pequena, 'registrar_custo', { tipo: 'material', descricao: 'Cadeira', valor: 400 }, T0);
   assert.deepEqual(orcamentoDoMes(db, [ger.hotel_id], T0), { custo: 400, previsto: 10000 });
 });
@@ -157,7 +159,7 @@ test('auditoria: gerente vê o próprio hotel; relatório CSV no padrão do Exce
   auditoria.registrar(db, sel('gerencia.canela'), 'quarto_bloqueado', { hotel_id: sel('gerencia.canela').hotel_id, alvo: '10' });
   assert.equal(auditoria.listar(db, ger).length, 1);
   assert.equal(auditoria.listar(db, admin).length, 2);
-  assert.throws(() => auditoria.listar(db, sel('manutencao')), (e) => e.status === 403);
+  assert.throws(() => auditoria.listar(db, sel('tecnico')), (e) => e.status === 403);
   const { nome, conteudo } = relatorios.exportar(db, ger, 'quartos', {});
   assert.match(nome, /^quartos-\d{4}-\d{2}-\d{2}\.csv$/);
   assert.equal(conteudo.charCodeAt(0), 0xFEFF, 'BOM para o Excel reconhecer UTF-8');
@@ -172,4 +174,47 @@ test('etiqueta QR e fotos continuam isoladas por hotel (regressão)', () => {
   const ctx = { uploadsDir: mkdtempSync(join(tmpdir(), 'hq-f-')) };
   assert.throws(() => fotos.salvarPadrao(db, sel('gerencia.canela'), q.id, { fotos: [{ arquivo: PNG }] }, ctx), (e) => e.status === 403);
   assert.equal(readdirSync(ctx.uploadsDir).length, 0);
+});
+
+test('perfil "Aprovador financeiro" foi removido: contas antigas perdem o acesso na inicialização', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fin-'));
+  const arquivo = join(dir, 'banco.db');
+  const db = abrirBanco(arquivo);
+  popularPiloto(db);
+  exec(db, "INSERT INTO usuarios (nome, login, senha_hash, papel, hotel_id) VALUES ('Financeiro', 'financeiro', 'x', 'aprovador_financeiro', NULL)");
+  db.close();
+  const db2 = abrirBanco(arquivo);
+  const u = um(db2, "SELECT ativo, excluido_em, login FROM usuarios WHERE nome = 'Financeiro'");
+  assert.equal(u.ativo, 0);
+  assert.ok(u.excluido_em);
+  assert.notEqual(u.login, 'financeiro', 'login liberado');
+  assert.equal(usuarios.listarUsuarios(db2, um(db2, "SELECT * FROM usuarios WHERE login = 'admin'")).some((x) => x.nome === 'Financeiro'), false);
+  db2.close();
+});
+
+test('sem chefe de manutenção: gerente aceita direto e distribui; contas antigas viram técnico', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'chefe-'));
+  const arquivo = join(dir, 'banco.db');
+  const db0 = abrirBanco(arquivo);
+  popularPiloto(db0);
+  exec(db0, "INSERT INTO usuarios (nome, login, senha_hash, papel, hotel_id) VALUES ('Chefe Antigo', 'chefe.antigo', 'x', 'manutencao_chefe', 1)");
+  db0.close();
+  const db = abrirBanco(arquivo);
+  assert.equal(um(db, "SELECT papel FROM usuarios WHERE login = 'chefe.antigo'").papel, 'tecnico');
+  const sel = (login) => um(db, 'SELECT id, nome, papel, hotel_id FROM usuarios WHERE login = ?', login);
+  const ger = sel('gerencia'); const gov = sel('governanca'); const tec = sel('tecnico');
+  const q = um(db, "SELECT id FROM quartos WHERE numero = '501'");
+  const nova = () => os.criar(db, gov, { quarto_id: q.id, local: 'quarto', categoria: 'hidraulica', prioridade: 'media', descricao: 'Chuveiro sem pressão' }, T0);
+  const a = nova();
+  assert.throws(() => os.executarAcao(db, tec, a, 'aceitar', {}, T0), (e) => e.status === 403);
+  os.executarAcao(db, ger, a, 'aceitar', { responsavel_id: tec.id }, T0);
+  const oa = os.buscar(db, a);
+  assert.deepEqual([oa.status, oa.recebido_por, oa.responsavel_id], ['aprovada', ger.id, tec.id]);
+  assert.throws(() => os.executarAcao(db, ger, nova(), 'aceitar', { responsavel_id: ger.id }, T0), /Profissional de manutenção inválido/);
+  const b = nova();
+  os.executarAcao(db, ger, b, 'aceitar', {}, T0);
+  assert.ok(um(db, "SELECT 1 AS x FROM notificacoes WHERE usuario_id = ? AND os_id = ? AND mensagem LIKE '%disponível%'", tec.id, b), 'técnicos avisados');
+  os.executarAcao(db, tec, b, 'assumir', {}, T0);
+  assert.equal(os.buscar(db, b).responsavel_id, tec.id);
+  db.close();
 });

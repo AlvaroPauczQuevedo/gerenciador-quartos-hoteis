@@ -64,8 +64,9 @@ const estaAtrasada = (os, now) => !STATUS_ENTREGUES.includes(os.status) && !!os.
 
 // ---------- perfis ----------
 
-const ehManutencao = (u, os) => ['manutencao_chefe', 'admin'].includes(u.papel) && podeVerHotel(u, os.hotel_id);
-const ehAprovador = (u, os) => ['aprovador_financeiro', 'diretoria', 'admin'].includes(u.papel) && podeVerHotel(u, os.hotel_id);
+// Quem coordena a manutenção do hotel: o gerente da unidade (ou a administração da rede).
+const ehManutencao = (u, os) => ((u.papel === 'gerente' && Number(u.hotel_id) === Number(os.hotel_id)) || u.papel === 'admin') && podeVerHotel(u, os.hotel_id);
+const ehAprovador = (u, os) => ['diretoria', 'admin'].includes(u.papel) && podeVerHotel(u, os.hotel_id);
 // Alçada: orçamentos até o limite configurado para o hotel podem ser aprovados pelo gerente da unidade.
 const limiteGerente = (db, hotelId) => Number(um(db, 'SELECT limite_aprovacao_gerente AS l FROM hoteis WHERE id = ?', hotelId)?.l || 0);
 function podeDecidirOrcamento(db, u, os) {
@@ -86,7 +87,7 @@ function ehExecutor(db, u, os) {
 
 function validarTecnico(db, os, id) {
   const t = um(db, 'SELECT * FROM usuarios WHERE id = ? AND ativo = 1', Number(id));
-  exigir(t && ['tecnico', 'manutencao_chefe'].includes(t.papel), 'Profissional de manutenção inválido.');
+  exigir(t && t.papel === 'tecnico', 'Profissional de manutenção inválido.');
   exigir(t.hotel_id == null || Number(t.hotel_id) === Number(os.hotel_id), 'O profissional não atende esta unidade.');
   return t;
 }
@@ -94,7 +95,7 @@ function validarTecnico(db, os, id) {
 // ---------- abertura (15.1) ----------
 
 export function criar(db, usuario, dados, agora) {
-  exigir(['gerente', 'governanta', 'admin', 'manutencao_chefe'].includes(usuario.papel),
+  exigir(['gerente', 'governanta', 'admin'].includes(usuario.papel),
     'Seu perfil não pode abrir solicitações de manutenção.', 403);
   const hotelId = Number(dados.hotel_id || usuario.hotel_id);
   exigir(hotelId, 'Informe o hotel de origem.');
@@ -198,7 +199,6 @@ export const ACOES = {
     rotulo: 'Assumir demanda',
     pode: (db, u, os) => {
       if (os.responsavel_id === u.id || !ATIVA(os) || ['devolvida_complementacao'].includes(os.status)) return false;
-      if (ehManutencao(u, os)) return true;
       return u.papel === 'tecnico' && podeVerHotel(u, os.hotel_id) && !os.responsavel_id &&
         (['aprovada', 'em_correcao'].includes(os.status) || EMERG(os));
     },
@@ -212,15 +212,16 @@ export const ACOES = {
     },
   },
   aceitar: {
-    rotulo: 'Aceitar solicitação',
-    pode: (db, u, os) => os.status === 'em_avaliacao' && ehManutencao(u, os),
+    rotulo: 'Aceitar e designar técnico',
+    pode: (db, u, os) => ['nova', 'em_avaliacao'].includes(os.status) && ehManutencao(u, os),
     exec(db, u, os, d, agora) {
-      const campos = {};
+      const campos = os.recebido_por ? {} : { recebido_por: u.id, recebido_em: agoraIso(agora) };
       if (d.prazo_previsto) campos.prazo_previsto = normalizarData(d.prazo_previsto);
       if (d.responsavel_id) campos.responsavel_id = validarTecnico(db, os, d.responsavel_id).id;
       mudarStatus(db, os, u, 'aprovada', { campos, texto: texto(d.texto) || 'Solicitação aceita pela manutenção.', agora });
       notificar(db, [os.aberto_por], { tipo: 'aprovada', mensagem: `${rotulo(os)} foi aceita pela manutenção.`, os_id: os.id, excluir: u.id, agora });
       if (campos.responsavel_id) notificarDesignacao(db, u, os, campos.responsavel_id, agora);
+      else notificar(db, usuariosDoHotel(db, os.hotel_id, ['tecnico']), { tipo: 'designacao', mensagem: `${rotulo(os)} está disponível para ser assumida.`, os_id: os.id, excluir: u.id, agora });
     },
   },
   devolver: {
@@ -725,7 +726,7 @@ export function detalhe(db, usuario, id, agora) {
     : null;
   os.acoes = acoesDisponiveis(db, usuario, base);
   os.estoque = todos(db, 'SELECT id, nome, unidade, quantidade, custo_unitario FROM estoque_itens WHERE hotel_id = ? AND ativo = 1 AND quantidade > 0 ORDER BY nome', os.hotel_id);
-  os.tecnicos = todos(db, `SELECT id, nome, papel FROM usuarios WHERE ativo = 1 AND papel IN ('tecnico', 'manutencao_chefe')
+  os.tecnicos = todos(db, `SELECT id, nome, papel FROM usuarios WHERE ativo = 1 AND papel = 'tecnico'
     AND (hotel_id = ? OR hotel_id IS NULL) ORDER BY nome`, os.hotel_id);
   return os;
 }

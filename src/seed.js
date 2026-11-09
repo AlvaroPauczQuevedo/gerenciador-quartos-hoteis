@@ -64,7 +64,6 @@ export function popular(db, ctx, agoraRef = new Date().toISOString()) {
 
     addUser('Ana Administradora', 'admin', 'admin');
     addUser('Helena Diretora', 'diretoria', 'diretoria');
-    addUser('Fábio Financeiro', 'financeiro', 'aprovador_financeiro');
 
     const nomes = {
       atlantico: ['Carla Mendes', 'Rosa Lima', 'Jorge Batista', 'Paulo Reis', 'Marcos Silva'],
@@ -74,12 +73,11 @@ export function popular(db, ctx, agoraRef = new Date().toISOString()) {
     const H = {};
     for (const h of hoteisDef) {
       const id = Number(exec(db, 'INSERT INTO hoteis (nome, cidade) VALUES (?, ?)', h.nome, h.cidade).lastInsertRowid);
-      const [g, gov, chefe, t1, t2] = nomes[h.slug];
+      const [g, gov, , t1, t2] = nomes[h.slug];
       H[h.slug] = {
         id,
         gerente: addUser(g, `gerente.${h.slug}`, 'gerente', id),
         governanta: addUser(gov, `governanta.${h.slug}`, 'governanta', id),
-        chefe: addUser(chefe, `manutencao.${h.slug}`, 'manutencao_chefe', id),
         tec1: addUser(t1, `tecnico1.${h.slug}`, 'tecnico', id),
         tec2: addUser(t2, `tecnico2.${h.slug}`, 'tecnico', id),
         quartos: {},
@@ -115,12 +113,12 @@ export function popular(db, ctx, agoraRef = new Date().toISOString()) {
     function ciclo(slug, id, t0, o = {}) {
       const tec = o.tecnico || 'tec1';
       let t = somarHoras(t0, o.hReceber ?? 1 + r() * 3);
-      if (!o.recebida) acao(slug, 'chefe', id, 'receber', {}, t);
+      if (!o.recebida) acao(slug, 'gerente', id, 'receber', {}, t);
       t = somarHoras(t, 0.5 + r());
-      acao(slug, 'chefe', id, 'aceitar', { responsavel_id: H[slug][tec] }, t);
+      acao(slug, 'gerente', id, 'aceitar', { responsavel_id: H[slug][tec] }, t);
       if (o.orcamento) {
         t = somarHoras(t, 2);
-        acao(slug, 'chefe', id, 'enviar_aprovacao', { valor: o.orcamento, descricao: 'Orçamento de peças e serviço', fornecedor: 'Fornecedor Regional Ltda.' }, t);
+        acao(slug, 'gerente', id, 'enviar_aprovacao', { valor: o.orcamento, descricao: 'Orçamento de peças e serviço', fornecedor: 'Fornecedor Regional Ltda.' }, t);
         t = somarHoras(t, 6 + r() * 20);
         os.executarAcao(db, U(3), id, 'autorizar', { texto: 'Aprovado conforme orçamento.' }, t);
       }
@@ -130,7 +128,7 @@ export function popular(db, ctx, agoraRef = new Date().toISOString()) {
         t = somarHoras(t, 1);
         acao(slug, tec, id, 'aguardar_materiais', { materiais: o.materiais }, t);
         t = somarHoras(t, 12 + r() * 24);
-        acao(slug, 'chefe', id, 'materiais_disponiveis', {}, t);
+        acao(slug, 'gerente', id, 'materiais_disponiveis', {}, t);
       }
       for (const c of o.custos || []) acao(slug, tec, id, 'registrar_custo', c, somarHoras(t, 1));
       t = somarHoras(t, o.hExec ?? 2 + r() * 20);
@@ -178,9 +176,9 @@ export function popular(db, ctx, agoraRef = new Date().toISOString()) {
       justificativa: 'Quarto indisponível para venda.', bloqueio_quarto: true,
     });
     foto('atlantico', 'gerente', os203, 'antes', imgAntes(5), dia(4, 20), 'Aparelho desligado');
-    acao('atlantico', 'chefe', os203, 'receber', {}, dia(4, 22));
-    acao('atlantico', 'chefe', os203, 'solicitar_orcamento', { texto: 'Avaliar substituição completa do aparelho — orçamento com fornecedor.' }, dia(3, 10));
-    acao('atlantico', 'chefe', os203, 'enviar_aprovacao', { valor: 3890, descricao: 'Substituição do aparelho split 12.000 BTUs inverter, instalação inclusa', fornecedor: 'Clima Rio Refrigeração' }, dia(2, 15));
+    acao('atlantico', 'gerente', os203, 'receber', {}, dia(4, 22));
+    acao('atlantico', 'gerente', os203, 'solicitar_orcamento', { texto: 'Avaliar substituição completa do aparelho — orçamento com fornecedor.' }, dia(3, 10));
+    acao('atlantico', 'gerente', os203, 'enviar_aprovacao', { valor: 3890, descricao: 'Substituição do aparelho split 12.000 BTUs inverter, instalação inclusa', fornecedor: 'Clima Rio Refrigeração' }, dia(2, 15));
 
     // Ar-condicionado também recorrente no Centro (problema estrutural comum entre hotéis).
     const q301c = H.centro.quartos['301'];
@@ -263,27 +261,27 @@ export function popular(db, ctx, agoraRef = new Date().toISOString()) {
     abrir('atlantico', dia(0, 8), { quarto_id: A.quartos['104'], local: 'banheiro', categoria: 'hidraulica', prioridade: 'emergencial', descricao: 'Vazamento forte no registro do banheiro, água invadindo o quarto.', impacto: 'critico', justificativa: 'Risco de dano ao piso e ao quarto inferior.', bloqueio_quarto: true });
     abrir('atlantico', dia(1, 15), { quarto_id: A.quartos['302'], local: 'quarto', categoria: 'mobiliario', prioridade: 'baixa', descricao: 'Poltrona com tecido desgastado, sugerir reforma do estofado.', impacto: 'baixo' });
     const av = abrir('serra', dia(1, 9), { quarto_id: S.quartos['203'], local: 'quarto', categoria: 'eletrica', prioridade: 'media', descricao: 'Interruptor da luz principal faiscando ao ligar.', impacto: 'medio' });
-    acao('serra', 'chefe', av, 'receber', {}, dia(1, 11));
+    acao('serra', 'gerente', av, 'receber', {}, dia(1, 11));
     const ap = abrir('centro', dia(2, 10), { quarto_id: C.quartos['202'], local: 'quarto', categoria: 'pintura', prioridade: 'media', descricao: 'Retoque de pintura na parede atrás da TV após troca do suporte.', impacto: 'baixo' });
-    acao('centro', 'chefe', ap, 'receber', {}, dia(2, 12));
-    acao('centro', 'chefe', ap, 'aceitar', { responsavel_id: C.tec2 }, dia(2, 13));
+    acao('centro', 'gerente', ap, 'receber', {}, dia(2, 12));
+    acao('centro', 'gerente', ap, 'aceitar', { responsavel_id: C.tec2 }, dia(2, 13));
     const ex = abrir('atlantico', dia(1, 7), { quarto_id: A.quartos['201'], local: 'quarto', categoria: 'fechaduras_portas', prioridade: 'alta', descricao: 'Porta do quarto não fecha corretamente — batente desalinhado.', impacto: 'alto', bloqueio_quarto: true });
-    acao('atlantico', 'chefe', ex, 'receber', {}, dia(1, 8));
-    acao('atlantico', 'chefe', ex, 'aceitar', { responsavel_id: A.tec2 }, dia(1, 8.5));
+    acao('atlantico', 'gerente', ex, 'receber', {}, dia(1, 8));
+    acao('atlantico', 'gerente', ex, 'aceitar', { responsavel_id: A.tec2 }, dia(1, 8.5));
     acao('atlantico', 'tec2', ex, 'iniciar', {}, dia(1, 10));
     acao('atlantico', 'tec2', ex, 'registrar_dificuldade', { texto: 'Batente com madeira comprometida por cupim; será necessário substituir a guarnição.' }, dia(1, 12));
     const mat = abrir('serra', dia(3, 14), { quarto_id: S.quartos['304'], local: 'banheiro', categoria: 'hidraulica', prioridade: 'alta', descricao: 'Banheira de hidromassagem não liga o motor.', impacto: 'alto', equipamento_id: equip(S.quartos['304'], 'Banheira de hidromassagem') });
-    acao('serra', 'chefe', mat, 'receber', {}, dia(3, 15));
-    acao('serra', 'chefe', mat, 'aceitar', { responsavel_id: S.tec1 }, dia(3, 15.5));
+    acao('serra', 'gerente', mat, 'receber', {}, dia(3, 15));
+    acao('serra', 'gerente', mat, 'aceitar', { responsavel_id: S.tec1 }, dia(3, 15.5));
     acao('serra', 'tec1', mat, 'iniciar', {}, dia(3, 17));
     acao('serra', 'tec1', mat, 'aguardar_materiais', { materiais: [{ descricao: 'Motobomba 1/2 CV para hidromassagem', quantidade: 1, unidade: 'un' }, { descricao: 'Kit de vedação', quantidade: 2, unidade: 'un' }] }, dia(2, 9));
     const orc = abrir('centro', dia(5, 9), { local: 'recepcao', categoria: 'estrutura_predial', prioridade: 'media', descricao: 'Infiltração no teto de gesso da recepção após chuvas.', impacto: 'medio' });
-    acao('centro', 'chefe', orc, 'receber', {}, dia(5, 10));
-    acao('centro', 'chefe', orc, 'solicitar_orcamento', { texto: 'Necessário orçamento de impermeabilização da laje com empresa especializada.' }, dia(5, 11));
+    acao('centro', 'gerente', orc, 'receber', {}, dia(5, 10));
+    acao('centro', 'gerente', orc, 'solicitar_orcamento', { texto: 'Necessário orçamento de impermeabilização da laje com empresa especializada.' }, dia(5, 11));
     const val = abrir('centro', dia(3, 8), { quarto_id: C.quartos['103'], local: 'quarto', categoria: 'iluminacao', prioridade: 'media', descricao: 'Luminária de leitura piscando.', impacto: 'baixo' });
     const tv = somarHoras(dia(3, 8), 2);
-    acao('centro', 'chefe', val, 'receber', {}, tv);
-    acao('centro', 'chefe', val, 'aceitar', { responsavel_id: C.tec1 }, tv);
+    acao('centro', 'gerente', val, 'receber', {}, tv);
+    acao('centro', 'gerente', val, 'aceitar', { responsavel_id: C.tec1 }, tv);
     acao('centro', 'tec1', val, 'iniciar', {}, somarHoras(tv, 3));
     fotos.salvar(db, U(C.tec1), { os_id: val, fase: 'depois', arquivo: imgDepois(), legenda: 'Luminária substituída' }, ctx, somarHoras(tv, 5));
     acao('centro', 'tec1', val, 'registrar_custo', { tipo: 'material', descricao: 'Luminária LED', valor: 89.9 }, somarHoras(tv, 5));
@@ -292,10 +290,10 @@ export function popular(db, ctx, agoraRef = new Date().toISOString()) {
     ciclo('serra', cor, dia(6, 10), { validar: false, hExec: 20 });
     acao('serra', 'gerente', cor, 'solicitar_correcao', { texto: 'Tinta com tom diferente do original. Refazer.' }, dia(1, 16));
     const atr = abrir('atlantico', dia(9, 9), { quarto_id: A.quartos['303'], local: 'quarto', categoria: 'eletrica', prioridade: 'media', descricao: 'Tomada do frigobar com mau contato.', impacto: 'medio' });
-    acao('atlantico', 'chefe', atr, 'receber', {}, dia(9, 10));
-    acao('atlantico', 'chefe', atr, 'aceitar', { responsavel_id: A.tec1 }, dia(9, 11));
+    acao('atlantico', 'gerente', atr, 'receber', {}, dia(9, 10));
+    acao('atlantico', 'gerente', atr, 'aceitar', { responsavel_id: A.tec1 }, dia(9, 11));
     const dev = abrir('centro', dia(2, 16), { local: 'lavanderia', categoria: 'outros', prioridade: 'baixa', descricao: 'Verificar barulho estranho na lavanderia.', impacto: 'baixo' }, 'governanta');
-    acao('centro', 'chefe', dev, 'devolver', { texto: 'Por favor, informe qual equipamento e em que horário ocorre o barulho.' }, dia(2, 18));
+    acao('centro', 'gerente', dev, 'devolver', { texto: 'Por favor, informe qual equipamento e em que horário ocorre o barulho.' }, dia(2, 18));
 
     // ---- Inspeções concluídas e agenda ----
     const respostasPadrao = (i) => (r() < 0.82 ? 'conforme' : r() < 0.6 ? 'atencao' : i % 5 === 0 ? 'manutencao' : 'na');
@@ -331,9 +329,7 @@ const CONTAS_PILOTO = [
   ['Administração Executive Osório', 'admin', 'admin'],
   ['Gerência Executive Osório', 'gerencia', 'gerente'],
   ['Governança Executive Osório', 'governanca', 'governanta'],
-  ['Manutenção Executive Osório', 'manutencao', 'manutencao_chefe'],
   ['Técnico de Manutenção', 'tecnico', 'tecnico'],
-  ['Financeiro Executive Osório', 'financeiro', 'aprovador_financeiro'],
 ];
 
 // Apartamentos informados pela gerência: 401–421, 501–521, 601–621, 701–721 e 801–821.

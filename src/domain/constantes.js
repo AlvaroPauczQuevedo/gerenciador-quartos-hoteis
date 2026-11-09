@@ -5,9 +5,7 @@ export const PAPEIS = {
   diretoria: 'Diretoria',
   gerente: 'Gerente de hotel',
   governanta: 'Governanta / inspeção',
-  manutencao_chefe: 'Responsável pela manutenção',
   tecnico: 'Profissional de manutenção',
-  aprovador_financeiro: 'Aprovador financeiro',
 };
 
 // Papéis com visão consolidada de toda a rede (seção 19).

@@ -4,7 +4,7 @@ import { todos, um, exec } from '../db.js';
 import { agoraIso, exigir, exigirHotel, exigirPapel, filtroHotel, texto } from './comum.js';
 import { notificar, equipeManutencao, gerentesDoHotel } from './notificacoes.js';
 
-const GESTORES = ['admin', 'gerente', 'manutencao_chefe'];
+const GESTORES = ['admin', 'gerente'];
 const arred = (n) => Math.round(Number(n) * 1000) / 1000;
 
 function buscarItem(db, usuario, id) {

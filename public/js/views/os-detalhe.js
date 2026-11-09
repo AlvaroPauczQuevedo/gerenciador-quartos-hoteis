@@ -168,7 +168,7 @@ export async function mostrar(el, [id]) {
         <section class="card">
           <h2>Histórico de atualizações e comentários</h2>
           <ol class="timeline">${os.eventos.map((ev) => html`<li class="${ev.tipo}">
-            <div><span class="quem">${ev.usuario_nome || 'Sistema'}</span> <span class="muted small">${ev.usuario_papel ? m.PAPEIS[ev.usuario_papel] : ''}</span>
+            <div><span class="quem">${ev.usuario_nome || 'Sistema'}</span> <span class="muted small">${ev.usuario_papel ? m.PAPEIS[ev.usuario_papel] || 'perfil removido' : ''}</span>
               · <span class="badge sem-ponto">${ROTULO_EVENTO[ev.tipo] || ev.tipo}</span> <span class="quando">${dataHora(ev.criado_em)}</span></div>
             ${ev.status_para ? html`<div class="small">${ev.status_de ? html`${m.STATUS[ev.status_de]} → ` : ''}<strong>${m.STATUS[ev.status_para]}</strong></div>` : ''}
             ${ev.texto ? html`<div class="corpo">${ev.texto}</div>` : ''}</li>`)}</ol>
