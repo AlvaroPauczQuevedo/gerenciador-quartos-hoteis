@@ -165,8 +165,14 @@ export const NOTIFICACAO_TIPOS = {
   quarto_liberado: 'Quarto liberado',
 };
 
+export const ORIGENS_AVALIACAO = {
+  booking: 'Booking.com', google: 'Google', tripadvisor: 'TripAdvisor', expedia: 'Expedia',
+  pesquisa: 'Pesquisa interna', recepcao: 'Reclamação na recepção', outro: 'Outro',
+};
+
 export function meta() {
   return {
+    ORIGENS_AVALIACAO,
     PAPEIS, CATEGORIAS, LOCAIS, PRIORIDADES, PRIORIDADE_DESCRICAO, SLA_HORAS, IMPACTOS,
     STATUS, STATUS_FINAIS, FASES_FOTO, RESPOSTAS_INSPECAO, TIPOS_CUSTO, NOTIFICACAO_TIPOS,
     EQUIPAMENTOS_PADRAO,

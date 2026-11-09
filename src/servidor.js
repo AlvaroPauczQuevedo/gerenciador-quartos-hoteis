@@ -10,6 +10,10 @@ import * as fotos from './domain/fotos.js';
 import { verificar } from './domain/agendador.js';
 import { filaPush } from './domain/notificacoes.js';
 import * as push from './domain/push.js';
+import * as backup from './domain/backup.js';
+import * as relatorios from './domain/relatorios.js';
+import * as auditoria from './domain/auditoria.js';
+import { createReadStream } from 'node:fs';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { popularPiloto, gravarCredenciais, HOTEL_PILOTO } from './seed.js';
@@ -17,7 +21,7 @@ import { importarRede, gravarCredenciaisRede } from './rede.js';
 
 const raiz = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dataDir = resolve(process.env.DATA_DIR || join(raiz, 'data'));
-const ctx = { uploadsDir: join(dataDir, 'uploads') };
+const ctx = { uploadsDir: join(dataDir, 'uploads'), dataDir };
 const publico = join(raiz, 'public');
 const PORTA = Number(process.env.PORT) || 3000;
 const PRODUCAO = process.env.NODE_ENV === 'production';
@@ -57,9 +61,15 @@ function listarPublico(dir, base = '') {
   });
 }
 const arquivosPublicos = listarPublico(publico);
-const VERSAO_APP = createHash('sha256').update(arquivosPublicos.map((f) => `${f}:${readFileSync(join(publico, f)).length}:${createHash('sha1').update(readFileSync(join(publico, f))).digest('hex')}`).join('|')).digest('hex').slice(0, 12);
-const CASCA_APP = ['/', ...arquivosPublicos.filter((f) => /^\/(css|js)\/|^\/img\/(app|rede)\/|^\/img\/favicon|^\/manifest/.test(f) && f !== '/sw.js')];
-const SW = readFileSync(join(publico, 'sw.js'), 'utf8').replace("const VERSAO = '__VERSAO__';", `const VERSAO = '${VERSAO_APP}';`).replace('const CASCA = __ARQUIVOS__;', `const CASCA = ${JSON.stringify(CASCA_APP)};`);
+const VERSAO_APP = createHash('sha256').update(arquivosPublicos.map((f) => `${f}:${readFileSync(join(publico, f)).length}:${createHash('sha1').update(readFileSync(join(publico, f))).digest('hex')}`).join('|'))
+  .update(readFileSync(join(raiz, 'src', 'pwa', 'sw-modelo.js'))).update(readFileSync(join(raiz, 'src', 'pwa', 'manifest.json')))
+  .digest('hex').slice(0, 12);
+// O service worker e o manifesto ficam FORA de public/: na Hostinger, os arquivos de public/ são entregues
+// direto pela CDN (sem passar por este servidor), o que impediria preencher a versão e o tipo do arquivo.
+const pastaPwa = join(raiz, 'src', 'pwa');
+const MANIFESTO = readFileSync(join(pastaPwa, 'manifest.json'), 'utf8');
+const CASCA_APP = ['/', '/manifest.webmanifest', ...arquivosPublicos.filter((f) => /^\/(css|js)\/|^\/img\/(app|rede)\/|^\/img\/favicon/.test(f))];
+const SW = readFileSync(join(pastaPwa, 'sw-modelo.js'), 'utf8').replace("const VERSAO = '__VERSAO__';", `const VERSAO = '${VERSAO_APP}';`).replace('const CASCA = __ARQUIVOS__;', `const CASCA = ${JSON.stringify(CASCA_APP)};`);
 if (SW.includes('__VERSAO__') || SW.includes('__ARQUIVOS__')) throw new Error('sw.js: marcadores de versão não substituídos.');
 const COOKIE = 'sid';
 const JANELA_LOGIN = 15 * 60e3;
@@ -92,6 +102,8 @@ function rodarAgendador() {
   try {
     transacao(db, () => verificar(db));
     enviarPushPendentes();
+    backup.backupDiario(db, dataDir).then((nome) => { if (nome) console.log(`Backup diário gerado: ${nome}`); })
+      .catch((e) => console.error('Backup diário falhou:', e.message));
   } catch (e) {
     descartarPushPendentes();
     console.error('Agendador:', e);
@@ -106,9 +118,13 @@ async function tratar(req, res) {
   const sid = cookies(req)[COOKIE];
 
   if (caminho === '/healthz') return json(res, 200, { ok: true, versao: VERSAO_APP });
-  if (caminho === '/sw.js') {
-    res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache' });
+  if (caminho === '/service-worker.js' || caminho === '/sw.js') {
+    res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Service-Worker-Allowed': '/' });
     return res.end(SW);
+  }
+  if (caminho === '/manifest.webmanifest') {
+    res.writeHead(200, { 'Content-Type': 'application/manifest+json; charset=utf-8', 'Cache-Control': 'no-cache' });
+    return res.end(MANIFESTO);
   }
 
   if (caminho === '/api/login' && req.method === 'POST') {
@@ -139,11 +155,33 @@ async function tratar(req, res) {
   if (caminho.startsWith('/api/') || caminho.startsWith('/uploads/')) {
     const usuario = usuarios.porToken(db, sid);
     if (!usuario) throw new ErroHttp(401, 'Sessão expirada. Faça login novamente.');
+    // Senha provisória: até trocar, só é permitido consultar os próprios dados e trocar a senha.
+    if (usuario.trocar_senha && !['/api/eu', '/api/eu/senha', '/api/push/cancelar'].includes(caminho)) {
+      throw new ErroHttp(403, 'Defina uma nova senha para continuar.');
+    }
 
     if (caminho.startsWith('/uploads/')) {
       const nome = caminho.slice('/uploads/'.length);
       fotos.buscarArquivo(db, usuario, nome);
       if (!(await servirArquivo(res, ctx.uploadsDir, nome, { cache: 'private, max-age=86400' }))) throw new ErroHttp(404, 'Arquivo não encontrado.');
+      return;
+    }
+
+    // Exportações para Excel (CSV): /api/exportar/demandas.csv, quartos.csv, indicadores.csv
+    const exp = /^\/api\/exportar\/(\w+)\.csv$/.exec(caminho);
+    if (req.method === 'GET' && exp) {
+      const { nome, conteudo } = relatorios.exportar(db, usuario, exp[1], Object.fromEntries(url.searchParams));
+      res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${nome}"`, 'Cache-Control': 'no-store' });
+      return res.end(conteudo);
+    }
+
+    // Download de backup (somente administrador): arquivo .db enviado como anexo.
+    if (req.method === 'GET' && caminho.startsWith('/api/backups/') && caminho.endsWith('/baixar')) {
+      const nome = decodeURIComponent(caminho.slice('/api/backups/'.length, -'/baixar'.length));
+      const arquivo = backup.caminhoParaDownload(usuario, dataDir, nome);
+      auditoria.registrar(db, usuario, 'backup_baixado', { alvo: nome });
+      res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="${nome}"`, 'Cache-Control': 'no-store' });
+      createReadStream(arquivo).pipe(res);
       return;
     }
 

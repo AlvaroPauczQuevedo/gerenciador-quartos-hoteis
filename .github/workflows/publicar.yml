@@ -1,0 +1,38 @@
+# Publicação segura: trabalhe na branch "desenvolvimento". Quando os testes passam,
+# este fluxo avança o "main" para o mesmo commit — e a Hostinger publica o "main" automaticamente.
+# Se algum teste falhar, o "main" (produção) não muda.
+name: Publicar em produção
+
+on:
+  push:
+    branches: [desenvolvimento]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publicar
+  cancel-in-progress: false
+
+jobs:
+  testar-e-publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verificar sintaxe do frontend
+        run: for f in public/js/*.js public/js/views/*.js; do node --check "$f"; done
+      - name: Testes automatizados
+        run: npm test
+      - name: Avançar main (somente avanço direto, sem sobrescrever produção)
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor origin/main HEAD; then
+            echo "::error::O main tem commits que não estão em desenvolvimento. Traga o main para desenvolvimento (git merge origin/main) e envie de novo."
+            exit 1
+          fi
+          git push origin HEAD:main

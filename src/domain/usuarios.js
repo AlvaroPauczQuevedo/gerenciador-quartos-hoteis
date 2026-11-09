@@ -14,7 +14,7 @@ function conferirSenha(senha, hash) {
   return timingSafeEqual(calc, Buffer.from(h, 'hex'));
 }
 
-const PUBLICO = 'u.id, u.nome, u.login, u.papel, u.hotel_id, u.ativo, h.nome AS hotel_nome';
+const PUBLICO = 'u.id, u.nome, u.login, u.papel, u.hotel_id, u.ativo, u.trocar_senha, h.nome AS hotel_nome';
 
 // Nome de usuário: minúsculas, números, ponto, hífen e sublinhado.
 export const normalizarLogin = (v) => texto(v).toLowerCase();
@@ -58,8 +58,15 @@ export function criarHotel(db, usuario, dados) {
 
 export function atualizarHotel(db, usuario, id, dados) {
   exigirPapel(usuario, 'admin');
-  exec(db, 'UPDATE hoteis SET nome = COALESCE(?, nome), cidade = COALESCE(?, cidade), exige_validacao = COALESCE(?, exige_validacao) WHERE id = ?',
-    texto(dados.nome) || null, texto(dados.cidade) || null, dados.exige_validacao == null ? null : dados.exige_validacao ? 1 : 0, Number(id));
+  const h = um(db, 'SELECT * FROM hoteis WHERE id = ?', Number(id));
+  exigir(h, 'Hotel não encontrado.', 404);
+  const numero = (v, atual) => (v === undefined ? atual : v === '' || v === null ? null : Number(v));
+  const limite = numero(dados.limite_aprovacao_gerente, h.limite_aprovacao_gerente) ?? 0;
+  const orcamento = numero(dados.orcamento_mensal, h.orcamento_mensal);
+  exigir(limite >= 0 && (orcamento === null || orcamento >= 0), 'Valores inválidos.');
+  exec(db, `UPDATE hoteis SET nome = ?, cidade = ?, exige_validacao = ?, limite_aprovacao_gerente = ?, orcamento_mensal = ? WHERE id = ?`,
+    texto(dados.nome) || h.nome, texto(dados.cidade) || h.cidade, dados.exige_validacao == null ? h.exige_validacao : dados.exige_validacao ? 1 : 0,
+    limite, orcamento, h.id);
 }
 
 // O gerente administra a equipe do próprio hotel. Acessos da rede (administrador geral e
@@ -119,13 +126,15 @@ export function alterarSenha(db, usuario, { atual, nova }) {
   const u = um(db, 'SELECT * FROM usuarios WHERE id = ?', usuario.id);
   exigir(conferirSenha(String(atual || ''), u.senha_hash), 'Senha atual incorreta.', 400);
   exigir(String(nova || '').length >= 8, 'A nova senha deve ter ao menos 8 caracteres.');
-  exec(db, 'UPDATE usuarios SET senha_hash = ? WHERE id = ?', hashSenha(String(nova)), u.id);
+  exigir(String(nova) !== String(atual), 'A nova senha deve ser diferente da atual.');
+  exec(db, 'UPDATE usuarios SET senha_hash = ?, trocar_senha = 0 WHERE id = ?', hashSenha(String(nova)), u.id);
 }
 
 export function redefinirSenha(db, usuario, id, nova) {
   buscarAlvo(db, usuario, id);
   exigir(String(nova || '').length >= 8, 'A senha deve ter ao menos 8 caracteres.');
-  exec(db, 'UPDATE usuarios SET senha_hash = ? WHERE id = ?', hashSenha(String(nova)), Number(id));
+  // Senha definida por outra pessoa é provisória: o usuário precisa trocá-la no próximo acesso.
+  exec(db, 'UPDATE usuarios SET senha_hash = ?, trocar_senha = 1 WHERE id = ?', hashSenha(String(nova)), Number(id));
   exec(db, 'DELETE FROM sessoes WHERE usuario_id = ?', Number(id));
 }
 

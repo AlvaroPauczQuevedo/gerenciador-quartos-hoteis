@@ -17,6 +17,12 @@ const ROTAS = [
   [/^\/rede$/, 'rede'],
   [/^\/notificacoes$/, 'notificacoes'],
   [/^\/cadastros$/, 'cadastros'],
+  [/^\/qrcodes$/, 'qrcodes'],
+  [/^\/auditoria$/, 'auditoria'],
+  [/^\/preventiva$/, 'preventiva'],
+  [/^\/estoque$/, 'estoque'],
+  [/^\/backups$/, 'backups'],
+  [/^\/os\/(\d+)\/imprimir$/, 'os-imprimir'],
 ];
 
 // Menu por perfil: cada papel vê primeiro o que mais usa.
@@ -29,12 +35,16 @@ function menu() {
   add('#/os', p === 'manutencao_chefe' || p === 'tecnico' ? 'Painel da manutenção' : 'Demandas (OS)');
   add('#/quartos', 'Quartos');
   if (['gerente', 'governanta', 'admin', 'manutencao_chefe'].includes(p)) add('#/inspecoes', 'Inspeções');
+  if (['gerente', 'admin', 'manutencao_chefe'].includes(p)) add('#/preventiva', 'Preventiva');
+  if (['gerente', 'admin', 'manutencao_chefe'].includes(p)) add('#/estoque', 'Estoque');
   if (p !== 'tecnico' && p !== 'governanta') {
     add('#/indicadores', 'Indicadores', 'Gestão');
     add('#/recorrencia', 'Recorrência', 'Gestão');
   }
   if (ehRede() && p !== 'tecnico') add('#/rede', 'Visão da rede', 'Gestão');
   if (p === 'admin' || p === 'gerente') add('#/cadastros', p === 'gerente' ? 'Equipe e cadastros' : 'Cadastros', 'Gestão');
+  if (['admin', 'gerente', 'diretoria'].includes(p)) add('#/auditoria', 'Registro de ações', 'Gestão');
+  if (p === 'admin') add('#/backups', 'Backups', 'Gestão');
   return itens;
 }
 
@@ -61,15 +71,16 @@ function shell() {
         <header class="topo-movel">
           <button id="abrir-menu" aria-label="Abrir menu">☰</button>
           <img src="${marca.src}" alt="${marca.alt}">
-          <a href="#/notificacoes" aria-label="Notificações">🔔 <span class="contador" id="cont-notif-m"></span></a>
+          <span class="topo-acoes"><button id="instalar-app-m" class="instalar-topo" hidden aria-label="Instalar o app">📲 Instalar</button>
+          <a href="#/notificacoes" aria-label="Notificações">🔔 <span class="contador" id="cont-notif-m"></span></a></span>
         </header>
         <main class="conteudo" id="conteudo"></main>
       </div>
     </div>`);
   $('#sair').addEventListener('click', async () => { await aoSair(); await post('/api/logout'); location.hash = ''; iniciar(); });
-  const botaoInstalar = $('#instalar-app');
-  const atualizarInstalar = () => { botaoInstalar.hidden = !podeInstalar(); };
-  botaoInstalar.addEventListener('click', instalar);
+  const botoesInstalar = [$('#instalar-app'), $('#instalar-app-m')];
+  const atualizarInstalar = () => { for (const b of botoesInstalar) b.hidden = !podeInstalar(); };
+  for (const b of botoesInstalar) b.addEventListener('click', instalar);
   atualizarInstalar();
   pararOuvirPWA?.();
   pararOuvirPWA = aoMudar(atualizarInstalar);
@@ -122,6 +133,8 @@ let navegacaoAtual = 0;
 async function navegar() {
   if (!estado.usuario) return;
   const caminho = location.hash.replace(/^#/, '').split('?')[0] || '/';
+  const qr = /^\/q\/(\d+)$/.exec(caminho);
+  if (qr) { location.replace(`#/quartos/${qr[1]}`); return; } // etiqueta QR na porta do quarto
   const query = Object.fromEntries(new URLSearchParams(location.hash.split('?')[1] || ''));
   const rota = ROTAS.find(([re]) => re.test(caminho));
   const el = $('#conteudo');
@@ -153,6 +166,11 @@ async function iniciar() {
   try {
     const eu = await api('/api/eu');
     Object.assign(estado, eu);
+    if (estado.usuario.trocar_senha) {
+      const { mostrar } = await import('./views/trocar-senha.js');
+      mostrar($('#app'), () => iniciar(), async () => { await aoSair(); await post('/api/logout'); location.hash = ''; iniciar(); });
+      return;
+    }
     shell();
     navegar();
     revincular();

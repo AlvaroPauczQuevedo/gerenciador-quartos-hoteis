@@ -2,6 +2,29 @@
 
 Plataforma integrada de gestão hoteleira, conservação predial e manutenção operacional para redes com várias unidades.
 
+## Publicação segura (testes antes de produção)
+
+A Hostinger publica automaticamente o que chega ao `main`. Para que nada quebrado vá para produção:
+
+1. Trabalhe e envie na branch **`desenvolvimento`** (`git push origin desenvolvimento`).
+2. O GitHub Actions (`.github/workflows/publicar.yml`) roda a verificação e os testes.
+3. Só se tudo passar, ele avança o `main` para o mesmo commit, e a Hostinger publica.
+
+Se algum teste falhar, o `main` não muda e o erro aparece na aba **Actions** do GitHub. Recomendado: em GitHub → Settings → Branches, proteja o `main` contra push direto.
+
+## Módulos de gestão
+
+- **Backup automático:** cópia completa do banco todo dia, guardando as últimas 30, em `DATA_DIR/backups`. O administrador baixa ou gera um backup na hora em **Backups**.
+- **Senha provisória:** quem recebe uma senha de outra pessoa (cadastro ou redefinição) precisa criar a própria senha no primeiro acesso. Até trocar, o servidor bloqueia o restante do sistema.
+- **Registro de ações:** quem criou ou excluiu usuários, redefiniu senhas, alterou quartos, checklist, bloqueios, preventiva, estoque e backups. O gerente vê o próprio hotel; administrador e diretoria veem a rede.
+- **QR codes:** etiquetas para imprimir, por hotel e andar, em **Quartos → QR codes**. Ao escanear, o app abre direto no quarto.
+- **Manutenção preventiva:** planos recorrentes que geram as OS sozinhos. As datas são distribuídas ao longo do período, e uma nova OS só é gerada quando a anterior foi encerrada. Preventivas não contam como recorrência.
+- **Estoque:** materiais por hotel, com entrada (custo médio), inventário e saída pela OS ("Usar material do estoque", que lança o custo). Alerta quando o material chega ao mínimo.
+- **Aprovação por limite de valor e orçamento mensal:** em Cadastros, o administrador define até quanto o gerente aprova orçamentos e o orçamento mensal de cada hotel, acompanhado na tela inicial e na visão da rede.
+- **Avaliações de hóspedes:** registro por quarto (Booking, Google, recepção…), que pode virar OS. A visão da rede cruza nota baixa com o número de manutenções.
+- **Relatórios:** exportação para Excel em Demandas, Quartos e Indicadores, e OS para imprimir ou salvar em PDF.
+- **Inspeção com conexão instável:** se a internet cair no meio da inspeção, as respostas ficam guardadas no aparelho e são enviadas quando a conexão volta. As fotos ainda precisam de conexão.
+
 ## App instalável e notificações no celular
 
 - O sistema pode ser instalado na tela inicial (Android, iPhone e computador) pelo botão **📲 Instalar app** no menu. No iPhone, a instalação é feita pelo Safari → Compartilhar → "Adicionar à Tela de Início".

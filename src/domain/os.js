@@ -11,6 +11,7 @@ import {
   notificar, equipeManutencao, gerentesDoHotel, aprovadoresDoHotel, usuariosDoHotel,
 } from './notificacoes.js';
 import * as quartos from './quartos.js';
+import * as estoque from './estoque.js';
 import { ocorrenciasRelacionadas } from './recorrencia.js';
 import { listarPadrao } from './fotos.js';
 
@@ -18,6 +19,8 @@ const ENTREGUES_SQL = STATUS_ENTREGUES.map((s) => `'${s}'`).join(',');
 const FINAIS_SQL = STATUS_FINAIS.map((s) => `'${s}'`).join(',');
 
 // ---------- utilitários ----------
+
+const ORIGENS = ['manual', 'inspecao', 'preventiva', 'hospede'];
 
 export function gerarProtocolo(db, agora) {
   const ano = new Date(agoraIso(agora)).getUTCFullYear();
@@ -63,6 +66,15 @@ const estaAtrasada = (os, now) => !STATUS_ENTREGUES.includes(os.status) && !!os.
 
 const ehManutencao = (u, os) => ['manutencao_chefe', 'admin'].includes(u.papel) && podeVerHotel(u, os.hotel_id);
 const ehAprovador = (u, os) => ['aprovador_financeiro', 'diretoria', 'admin'].includes(u.papel) && podeVerHotel(u, os.hotel_id);
+// Alçada: orçamentos até o limite configurado para o hotel podem ser aprovados pelo gerente da unidade.
+const limiteGerente = (db, hotelId) => Number(um(db, 'SELECT limite_aprovacao_gerente AS l FROM hoteis WHERE id = ?', hotelId)?.l || 0);
+function podeDecidirOrcamento(db, u, os) {
+  const pendente = um(db, "SELECT valor FROM aprovacoes WHERE os_id = ? AND status = 'pendente'", os.id);
+  if (!pendente) return false;
+  if (ehAprovador(u, os)) return true;
+  const limite = limiteGerente(db, os.hotel_id);
+  return u.papel === 'gerente' && Number(u.hotel_id) === Number(os.hotel_id) && limite > 0 && pendente.valor <= limite;
+}
 const ehValidador = (u, os) =>
   (u.papel === 'gerente' && Number(u.hotel_id) === Number(os.hotel_id)) || u.papel === 'admin' || u.id === os.aberto_por;
 
@@ -123,22 +135,25 @@ export function criar(db, usuario, dados, agora) {
     `INSERT INTO ordens_servico (protocolo, hotel_id, quarto_id, equipamento_id, local, categoria, titulo, descricao,
       prioridade, prioridade_original, identificado_em, justificativa, impacto, bloqueio_quarto, prazo_desejado,
       prazo_previsto, observacoes, status, origem, inspecao_item_id, os_origem_id, exige_validacao, aberto_por,
-      criado_em, atualizado_em)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'nova', ?, ?, ?, ?, ?, ?, ?)`,
+      criado_em, atualizado_em, plano_preventiva_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'nova', ?, ?, ?, ?, ?, ?, ?, ?)`,
     gerarProtocolo(db, now), hotelId, quartoId, equipamentoId, local, categoria, titulo, descricao,
     prioridade, prioridade, normalizarData(dados.identificado_em) || now, texto(dados.justificativa) || null,
     texto(dados.impacto) || null, bloqueio ? 1 : 0, prazoDesejado, prazoPrevisto, texto(dados.observacoes) || null,
-    dados.origem === 'inspecao' ? 'inspecao' : 'manual', dados.inspecao_item_id || null, dados.os_origem_id || null,
-    hotel.exige_validacao, usuario.id, now, now
+    ORIGENS.includes(dados.origem) ? dados.origem : 'manual', dados.inspecao_item_id || null, dados.os_origem_id || null,
+    hotel.exige_validacao, usuario.id, now, now, dados.plano_preventiva_id || null
   );
   const os = buscar(db, Number(r.lastInsertRowid));
   evento(db, os, usuario, 'abertura', {
     para: 'nova', agora,
-    texto: `Solicitação aberta com prioridade ${PRIORIDADES[prioridade]}.${os.origem === 'inspecao' ? ' Origem: inspeção periódica.' : ''}`,
+    texto: `Solicitação aberta com prioridade ${PRIORIDADES[prioridade]}.${{ inspecao: ' Origem: inspeção periódica.', preventiva: ' Origem: manutenção preventiva programada.', hospede: ' Origem: avaliação/reclamação de hóspede.' }[os.origem] || ''}`,
   });
 
   // Integração 6: necessidade de indisponibilidade bloqueia o quarto até liberação autorizada.
   if (bloqueio) quartos.bloquear(db, usuario, quartoId, { motivo: `${os.protocolo}: ${titulo}`, os_id: os.id, agora });
+
+  // Preventivas são geradas em lote pelo agendador, que envia um único aviso por plano (sem alerta de recorrência).
+  if (os.origem === 'preventiva') return os.id;
 
   // Integração 4: equipe de manutenção recebe notificação. Emergenciais alertam também técnicos e gerentes.
   const destinatarios = equipeManutencao(db, hotelId);
@@ -261,12 +276,14 @@ export const ACOES = {
       const t = `Orçamento de ${moeda(valor)} encaminhado para aprovação${posterior ? ' (regularização posterior — atendimento emergencial)' : ''}: ${texto(d.descricao)}`;
       if (posterior) evento(db, os, u, 'orcamento', { texto: t, agora });
       else mudarStatus(db, os, u, 'aguardando_autorizacao', { texto: t, agora });
-      notificar(db, aprovadoresDoHotel(db, os.hotel_id), { tipo: 'orcamento', mensagem: `Orçamento de ${moeda(valor)} aguarda aprovação — ${rotulo(os)}`, os_id: os.id, excluir: u.id, agora });
+      const limite = limiteGerente(db, os.hotel_id);
+      const quemAprova = limite > 0 && valor <= limite ? gerentesDoHotel(db, os.hotel_id) : aprovadoresDoHotel(db, os.hotel_id);
+      notificar(db, quemAprova, { tipo: 'orcamento', mensagem: `Orçamento de ${moeda(valor)} aguarda aprovação — ${rotulo(os)}`, os_id: os.id, excluir: u.id, agora });
     },
   },
   autorizar: {
     rotulo: 'Autorizar orçamento',
-    pode: (db, u, os) => ehAprovador(u, os) && !!um(db, "SELECT 1 AS x FROM aprovacoes WHERE os_id = ? AND status = 'pendente'", os.id),
+    pode: (db, u, os) => podeDecidirOrcamento(db, u, os),
     exec(db, u, os, d, agora) {
       decidirAprovacao(db, u, os, 'aprovado', d, agora);
       const t = `Orçamento autorizado por ${u.nome}.${texto(d.texto) ? ` ${texto(d.texto)}` : ''}`;
@@ -278,7 +295,7 @@ export const ACOES = {
   negar: {
     rotulo: 'Recusar orçamento',
     exigeTexto: true,
-    pode: (db, u, os) => ehAprovador(u, os) && !!um(db, "SELECT 1 AS x FROM aprovacoes WHERE os_id = ? AND status = 'pendente'", os.id),
+    pode: (db, u, os) => podeDecidirOrcamento(db, u, os),
     exec(db, u, os, d, agora) {
       decidirAprovacao(db, u, os, 'recusado', d, agora);
       const t = `Orçamento recusado por ${u.nome}: ${d.texto}. A manutenção deve reavaliar a solicitação.`;
@@ -394,6 +411,20 @@ export const ACOES = {
       exec(db, 'INSERT INTO os_custos (os_id, tipo, descricao, valor, registrado_por, criado_em) VALUES (?, ?, ?, ?, ?, ?)',
         os.id, d.tipo, texto(d.descricao), valor, u.id, agoraIso(agora));
       evento(db, os, u, 'custo', { texto: `Custo registrado (${TIPOS_CUSTO[d.tipo]}): ${texto(d.descricao)} — ${moeda(valor)}`, agora });
+    },
+  },
+  baixar_estoque: {
+    rotulo: 'Usar material do estoque',
+    pode: (db, u, os) => (NAO_FINAL(os) || os.status === 'encerrada') && ehExecutor(db, u, os)
+      && !!um(db, 'SELECT 1 AS x FROM estoque_itens WHERE hotel_id = ? AND ativo = 1 AND quantidade > 0 LIMIT 1', os.hotel_id),
+    exec(db, u, os, d, agora) {
+      const item = um(db, 'SELECT * FROM estoque_itens WHERE id = ?', Number(d.item_id));
+      exigir(item && item.hotel_id === os.hotel_id, 'Material de estoque inválido para este hotel.');
+      const r = estoque.movimentar(db, u, item.id, { tipo: 'saida', quantidade: d.quantidade, os_id: os.id, observacao: os.protocolo }, agora);
+      const qtd = Number(d.quantidade);
+      exec(db, 'INSERT INTO os_custos (os_id, tipo, descricao, valor, registrado_por, criado_em) VALUES (?, ?, ?, ?, ?, ?)',
+        os.id, 'material', `${qtd} ${item.unidade} ${item.nome} (estoque)`, r.valor, u.id, agoraIso(agora));
+      evento(db, os, u, 'custo', { texto: `Material do estoque: ${qtd} ${item.unidade} de ${item.nome} — ${moeda(r.valor)}. Saldo: ${r.item.quantidade} ${item.unidade}.`, agora });
     },
   },
   adicionar_tarefa: {
@@ -693,6 +724,7 @@ export function detalhe(db, usuario, id, agora) {
     ? um(db, 'SELECT i.id AS item_id, i.item, i.ambiente, i.inspecao_id FROM inspecao_itens i WHERE i.id = ?', os.inspecao_item_id)
     : null;
   os.acoes = acoesDisponiveis(db, usuario, base);
+  os.estoque = todos(db, 'SELECT id, nome, unidade, quantidade, custo_unitario FROM estoque_itens WHERE hotel_id = ? AND ativo = 1 AND quantidade > 0 ORDER BY nome', os.hotel_id);
   os.tecnicos = todos(db, `SELECT id, nome, papel FROM usuarios WHERE ativo = 1 AND papel IN ('tecnico', 'manutencao_chefe')
     AND (hotel_id = ? OR hotel_id IS NULL) ORDER BY nome`, os.hotel_id);
   return os;

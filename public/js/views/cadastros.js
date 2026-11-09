@@ -20,9 +20,12 @@ export async function mostrar(el, _p, query = {}) {
   render(el, html`
     <div class="cabecalho"><div><h1>${admin ? 'Cadastros' : 'Equipe e cadastros'}</h1><p class="sub">${admin ? 'Unidades, quartos, checklist e usuários da plataforma.' : `Usuários, quartos e checklist do ${estado.usuario.hotel_nome}.`}</p></div></div>
       ${admin ? html`<section class="card" style="margin-bottom:1rem"><h2>Unidades hoteleiras</h2>
-        <div class="tabela-wrap"><table><thead><tr><th>Hotel</th><th>Cidade</th><th class="num">Quartos</th><th>Validação do gerente</th></tr></thead><tbody>
+        <div class="tabela-wrap"><table><thead><tr><th>Hotel</th><th>Cidade</th><th class="num">Quartos</th><th>Validação do gerente</th><th title="Orçamentos até este valor o gerente do hotel aprova">Gerente aprova até (R$)</th><th>Orçamento mensal (R$)</th></tr></thead><tbody>
           ${hoteis.map((h) => html`<tr><td>${h.logo ? html`<img src="/img/hoteis/${h.logo}/horizontal.svg" alt="" style="height:22px;width:auto;display:block;margin-bottom:.2rem;background:#fff;border-radius:3px;padding:2px">` : ''}${h.nome}</td><td>${h.cidade || '—'}</td>
-            <td class="num">${h.total_quartos}${h.quartos_provisorios ? html`<br><span class="badge warn sem-ponto">${h.quartos_provisorios} provisórios</span>` : !h.total_quartos ? html`<br><span class="badge danger sem-ponto">cadastrar</span>` : ''}</td><td><label class="check"><input type="checkbox" data-validacao="${h.id}" ${h.exige_validacao ? raw('checked') : ''}> exigida</label></td></tr>`)}</tbody></table></div>
+            <td class="num">${h.total_quartos}${h.quartos_provisorios ? html`<br><span class="badge warn sem-ponto">${h.quartos_provisorios} provisórios</span>` : !h.total_quartos ? html`<br><span class="badge danger sem-ponto">cadastrar</span>` : ''}</td><td><label class="check"><input type="checkbox" data-validacao="${h.id}" ${h.exige_validacao ? raw('checked') : ''}> exigida</label></td>
+            <td><input type="number" min="0" step="50" style="max-width:9rem" data-config="limite_aprovacao_gerente" data-hotel="${h.id}" value="${h.limite_aprovacao_gerente || 0}"></td>
+            <td><input type="number" min="0" step="100" style="max-width:9rem" data-config="orcamento_mensal" data-hotel="${h.id}" value="${h.orcamento_mensal ?? ''}" placeholder="não definido"></td></tr>`)}</tbody></table></div>
+        <p class="small muted">"Gerente aprova até": orçamentos de manutenção até esse valor são aprovados pelo gerente do hotel; acima, pelo aprovador financeiro da rede (0 = sempre a rede).</p>
         <form class="form" id="f-hotel" style="margin-top:1rem"><h3>Nova unidade</h3><div class="form-grade" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr))">
           <label class="campo"><span class="obrig">Nome</span><input name="nome" required></label>
           <label class="campo"><span>Cidade</span><input name="cidade"></label></div>
@@ -181,6 +184,11 @@ export async function mostrar(el, _p, query = {}) {
     });
   }
   enviar('#f-usuario', '/api/usuarios', 'Usuário cadastrado.');
+  for (const c of $$('[data-config]', el)) {
+    c.addEventListener('change', async () => {
+      try { await put(`/api/hoteis/${c.dataset.hotel}`, { [c.dataset.config]: c.value }); toast('Configuração salva.'); } catch (err) { toast(err.message, 'erro'); }
+    });
+  }
   for (const c of $$('[data-validacao]', el)) {
     c.addEventListener('change', async () => { await put(`/api/hoteis/${c.dataset.validacao}`, { exige_validacao: c.checked }); toast('Configuração salva.'); });
   }

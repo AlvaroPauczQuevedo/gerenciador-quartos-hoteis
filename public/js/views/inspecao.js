@@ -4,6 +4,39 @@ import { html, render, $, modal, toast, opcoes, dadosForm, prepararArquivo, gale
 
 const CLASSE = { conforme: 'conforme', atencao: 'atencao', manutencao: 'manutencao', na: 'na' };
 
+// Fila de respostas da inspeção para quando a conexão cai (corredores e banheiros sem sinal).
+// As respostas ficam guardadas no aparelho e são enviadas sozinhas quando a internet volta.
+const chaveFila = (insId) => `fila-inspecao-${insId}`;
+const lerFila = (insId) => { try { return JSON.parse(localStorage.getItem(chaveFila(insId)) || '{}'); } catch { return {}; } };
+const gravarFila = (insId, fila) => {
+  try { Object.keys(fila).length ? localStorage.setItem(chaveFila(insId), JSON.stringify(fila)) : localStorage.removeItem(chaveFila(insId)); } catch { /* sem armazenamento */ }
+};
+const ehFalhaDeRede = (err) => !navigator.onLine || err instanceof TypeError;
+
+async function salvarResposta(insId, itemId, dados) {
+  try {
+    await put(`/api/inspecoes/itens/${itemId}`, dados);
+    return 'enviado';
+  } catch (err) {
+    if (!ehFalhaDeRede(err)) throw err;
+    gravarFila(insId, { ...lerFila(insId), [itemId]: dados });
+    return 'na-fila';
+  }
+}
+
+// Envia o que ficou guardado. Retorna quantas respostas ainda faltam.
+export async function enviarFila(insId) {
+  const fila = lerFila(insId);
+  for (const [itemId, dados] of Object.entries(fila)) {
+    try { await put(`/api/inspecoes/itens/${itemId}`, dados); delete fila[itemId]; } catch (err) { if (ehFalhaDeRede(err)) break; delete fila[itemId]; }
+  }
+  gravarFila(insId, fila);
+  return Object.keys(fila).length;
+}
+
+const ouvindo = new Set();
+const aoVoltarPor = new Map();
+
 export async function mostrar(el, [id]) {
   const ins = await api(`/api/inspecoes/${id}`);
   const M = estado.meta;
@@ -28,9 +61,12 @@ export async function mostrar(el, [id]) {
       </div></div>` : ''}
   </div>`;
 
+  // Respostas guardadas offline aparecem na tela e são reenviadas.
+  for (const [itemId, dados] of Object.entries(lerFila(ins.id))) Object.assign(ins.itens.find((i) => String(i.id) === itemId) || {}, dados);
   const progresso = () => {
     const resp = ins.itens.filter((i) => i.resposta).length;
-    return html`<strong>${resp}/${ins.itens.length}</strong> itens respondidos${ins.parcial.pontuacao != null ? html` · conformidade parcial ${numero(ins.parcial.pontuacao, 0)}% ${estrelas(ins.parcial.estrelas)}` : ''}`;
+    const pendentes = Object.keys(lerFila(ins.id)).length;
+    return html`${pendentes ? html`<span class="badge warn sem-ponto" title="Sem conexão: as respostas estão guardadas neste aparelho e serão enviadas quando a internet voltar">⏳ ${pendentes} aguardando conexão</span> ` : ''}<strong>${resp}/${ins.itens.length}</strong> itens respondidos${ins.parcial.pontuacao != null ? html` · conformidade parcial ${numero(ins.parcial.pontuacao, 0)}% ${estrelas(ins.parcial.estrelas)}` : ''}`;
   };
 
   render(el, html`
@@ -71,7 +107,9 @@ export async function mostrar(el, [id]) {
     if (b) {
       const it = acharItem(b);
       it.resposta = b.dataset.resp;
-      try { await put(`/api/inspecoes/itens/${it.id}`, { resposta: it.resposta, observacao: it.observacao }); } catch (err) { toast(err.message, 'erro'); return; }
+      try {
+        if (await salvarResposta(ins.id, it.id, { resposta: it.resposta, observacao: it.observacao }) === 'na-fila') toast('Sem conexão: resposta guardada no aparelho. Será enviada quando a internet voltar.');
+      } catch (err) { toast(err.message, 'erro'); return; }
       recalcular();
       redesenhar(it);
       if (it.resposta !== 'conforme' && it.resposta !== 'na') $(`[data-item="${it.id}"] [data-obs]`, el)?.focus();
@@ -116,7 +154,7 @@ export async function mostrar(el, [id]) {
     const it = acharItem(e.target);
     if ((it.observacao || '') === e.target.value) return;
     it.observacao = e.target.value;
-    if (it.resposta) await put(`/api/inspecoes/itens/${it.id}`, { resposta: it.resposta, observacao: it.observacao });
+    if (it.resposta) await salvarResposta(ins.id, it.id, { resposta: it.resposta, observacao: it.observacao }).catch((err) => toast(err.message, 'erro'));
   });
   $('#itens', el).addEventListener('change', async (e) => {
     if (!e.target.matches('[data-foto]')) return;
@@ -136,10 +174,25 @@ export async function mostrar(el, [id]) {
     e.preventDefault();
     // Garante que a observação em edição seja salva antes de concluir.
     document.activeElement?.blur?.();
+    if (await enviarFila(ins.id)) {
+      const x = $('#erro', el); x.textContent = 'Ainda há respostas guardadas sem conexão. Conecte-se à internet para enviar e concluir a inspeção.'; x.hidden = false;
+      return;
+    }
     try {
       const r = await post(`/api/inspecoes/${ins.id}/concluir`, dadosForm(e.target));
       toast(`Inspeção concluída: ${numero(r.pontuacao, 0)}% (${r.estrelas} estrela(s)).${r.geradas.length ? ` ${r.geradas.length} solicitação(ões) gerada(s).` : ''}${r.cronicos ? ` ${r.cronicos} problema(s) crônico(s) registrado(s).` : ''}`);
       recarregar();
     } catch (err) { const x = $('#erro', el); x.textContent = err.message; x.hidden = false; }
   });
+  if (aberta) {
+    const aoVoltar = async () => {
+      if (!Object.keys(lerFila(ins.id)).length) return;
+      const faltam = await enviarFila(ins.id);
+      if (!faltam) toast('Conexão restabelecida: respostas da inspeção enviadas.');
+      if ($('#progresso', el)) $('#progresso', el).innerHTML = progresso().s;
+    };
+    if (!ouvindo.has(ins.id)) { ouvindo.add(ins.id); window.addEventListener('online', () => aoVoltarPor.get(ins.id)?.()); }
+    aoVoltarPor.set(ins.id, aoVoltar);
+    aoVoltar();
+  }
 }

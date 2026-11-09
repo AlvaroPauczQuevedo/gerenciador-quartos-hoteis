@@ -33,7 +33,8 @@ export async function mostrar(el, _p, query) {
   const g = d.geral;
   render(el, html`
     <div class="cabecalho"><div><h1>Indicadores de desempenho da manutenção</h1>
-      <p class="sub">Demandas abertas entre ${new Date(d.periodo.de).toLocaleDateString('pt-BR')} e ${new Date(d.periodo.ate).toLocaleDateString('pt-BR')}</p></div></div>
+      <p class="sub">Demandas abertas entre ${new Date(d.periodo.de).toLocaleDateString('pt-BR')} e ${new Date(d.periodo.ate).toLocaleDateString('pt-BR')}</p></div>
+      <div class="acoes-topo"><a class="btn" href="/api/exportar/indicadores.csv${qs(query)}" download>⬇ Excel</a></div></div>
     <form class="filtros" id="filtros">${ehRede() ? html`<label>Unidade ${seletorHotel(query.hotel_id)}</label>` : ''}${filtroPeriodo(query)}</form>
     <div class="kpis">
       ${kpi('Demandas abertas', g.total)}

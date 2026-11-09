@@ -25,14 +25,16 @@ export async function mostrar(el, _p, query) {
     </div>
     <section class="card"><h2>Comparativo entre unidades</h2>
       <div class="tabela-wrap"><table><thead><tr><th>Unidade</th><th>Conservação</th><th class="num">Quartos</th><th class="num">Bloqueados</th><th class="num">Baixa aval.</th><th class="num">Insp. vencidas</th>
-        <th class="num">Pendentes</th><th class="num">Atrasadas</th><th class="num">Demandas (período)</th><th class="num">No prazo</th><th class="num">Tempo concl.</th><th class="num">Custo</th><th class="num">Custo/quarto</th><th class="num">Crônicos</th><th class="num">Recorrências</th></tr></thead>
+        <th class="num">Pendentes</th><th class="num">Atrasadas</th><th class="num">Demandas (período)</th><th class="num">No prazo</th><th class="num">Tempo concl.</th><th class="num">Custo</th><th class="num">Custo/quarto</th><th class="num">Crônicos</th><th class="num">Recorrências</th><th class="num">Orçamento do mês</th><th class="num">Nota hóspedes</th></tr></thead>
         <tbody>${u.map((h) => html`<tr><td><strong>${h.nome}</strong><br><span class="muted small">${h.cidade || ''}</span></td>
           <td>${estrelas(h.estrelas_media)} <span class="muted small">${numero(h.estrelas_media, 1)}</span></td>
           <td class="num">${h.quartos}</td><td class="num">${h.bloqueados}</td><td class="num">${h.baixa_avaliacao}</td><td class="num">${h.inspecoes_vencidas}</td>
           <td class="num"><a href="#/os?hotel_id=${h.hotel_id}&grupo=todas_abertas">${h.pendentes_agora}</a></td>
           <td class="num">${h.atrasadas_agora ? html`<a href="#/os?hotel_id=${h.hotel_id}&grupo=atrasadas" style="color:var(--danger);font-weight:700">${h.atrasadas_agora}</a>` : 0}</td>
           <td class="num">${h.total}</td><td class="num">${pct(h.taxa_no_prazo)}</td><td class="num">${horas(h.tempo_conclusao_h)}</td>
-          <td class="num">${moeda(h.custo_total)}</td><td class="num">${moeda(h.custo_por_quarto)}</td><td class="num">${h.cronicos}</td><td class="num">${h.alertas_recorrencia}</td></tr>`)}</tbody></table></div>
+          <td class="num">${moeda(h.custo_total)}</td><td class="num">${moeda(h.custo_por_quarto)}</td><td class="num">${h.cronicos}</td><td class="num">${h.alertas_recorrencia}</td>
+          <td class="num">${h.orcamento_mes?.previsto ? html`<span style="${h.orcamento_mes.custo > h.orcamento_mes.previsto ? 'color:var(--danger);font-weight:700' : ''}">${Math.round((h.orcamento_mes.custo / h.orcamento_mes.previsto) * 100)}%</span><br><span class="muted small">${moeda(h.orcamento_mes.custo)}</span>` : html`<span class="muted small">${moeda(h.orcamento_mes?.custo || 0)}</span>`}</td>
+          <td class="num">${h.nota_hospedes?.n ? html`${numero(h.nota_hospedes.media, 1)}<br><span class="muted small">${h.nota_hospedes.n} aval.</span>` : '—'}</td></tr>`)}</tbody></table></div>
     </section>
     <div class="grade grade-3" style="margin-top:1rem">
       <section class="card"><h2>Volume de manutenção</h2>${barras(u, { valor: (h) => h.total, rotulo: (h) => h.nome })}</section>
@@ -47,6 +49,12 @@ export async function mostrar(el, _p, query) {
         ${d.problemasComuns.length ? html`<ul class="lista-simples">${d.problemasComuns.map((p) => html`<li><strong>${p.problema}</strong> — recorrente em ${p.n_hoteis} unidades (${p.hoteis.join(', ')})
           <div class="muted small">${p.quartos} quarto(s) com recorrência · ${p.ocorrencias} ocorrências · ${moeda(p.custo)}</div></li>`)}</ul>
           <p class="small muted">Sugestão: avaliar padronização de fornecedor, contrato de manutenção preventiva ou substituição em escala.</p>` : html`<p class="vazio">Nenhum problema recorrente em mais de uma unidade.</p>`}
+      </section>
+      <section class="card"><h2>Hóspedes insatisfeitos × manutenção</h2>
+        <p class="small muted">Quartos com nota média de hóspedes até 3 nos últimos 180 dias, com o número de manutenções no mesmo período.</p>
+        ${d.hospedesCriticos.length ? html`<div class="tabela-wrap"><table><thead><tr><th>Quarto</th><th class="num">Nota média</th><th class="num">Avaliações</th><th class="num">Manutenções</th></tr></thead><tbody>
+          ${d.hospedesCriticos.map((q) => html`<tr class="clicavel" data-href="#/quartos/${q.id}"><td>${q.hotel_nome} · <a href="#/quartos/${q.id}">${q.numero}</a></td><td class="num">${numero(q.media, 1)}</td><td class="num">${q.avaliacoes}</td><td class="num">${q.manutencoes}</td></tr>`)}</tbody></table></div>`
+          : html`<p class="vazio">Nenhum quarto com nota baixa registrada.</p>`}
       </section>
       <section class="card"><h2>Quartos com baixa avaliação</h2>
         ${d.baixaAvaliacao.length ? html`<div class="tabela-wrap"><table><thead><tr><th>Quarto</th><th>Avaliação</th><th>Situação</th><th class="num">OS abertas</th><th class="num">Crônicos</th></tr></thead><tbody>

@@ -1,7 +1,7 @@
 import { estado, api, qs, ehRede } from '../estado.js';
 import { html, render, numero, moeda, relativo, dataHora } from '../ui.js';
 import { tabelaOS, kpi } from './componentes.js';
-import { estadoPush } from '../pwa.js';
+import { estadoPush, podeInstalar, instalar } from '../pwa.js';
 
 const CHAVE_CONVITE = 'convite-push-dispensado';
 const conviteDispensado = () => { try { return localStorage.getItem(CHAVE_CONVITE) === '1'; } catch { return false; } };
@@ -10,7 +10,8 @@ export async function mostrar(el) {
   const u = estado.usuario;
   const p = u.papel;
   const [resumo, notifs, situacaoPush] = await Promise.all([api('/api/resumo'), api('/api/notificacoes'), estadoPush().catch(() => 'indisponivel')]);
-  const convidarPush = ['inativo', 'instalar-ios'].includes(situacaoPush) && !conviteDispensado();
+  const convidarInstalar = podeInstalar();
+  const convidarPush = !convidarInstalar && situacaoPush === 'inativo' && !conviteDispensado();
 
   const blocos = [];
   const carregar = (titulo, filtros, opts = {}) => api(`/api/os${qs({ limite: 8, ...filtros })}`).then((lista) => ({ titulo, lista, ...opts }));
@@ -42,6 +43,9 @@ export async function mostrar(el) {
         ${ehRede() && p !== 'tecnico' ? html`<a class="btn" href="#/rede">Visão da rede</a>` : ''}
       </div>
     </div>
+    ${convidarInstalar ? html`<div class="aviso info" id="convite-instalar" style="margin-bottom:1rem"><span class="icone">📲</span>
+      <div style="flex:1"><strong>Instale o app no celular</strong> para abrir com um toque e receber os avisos da manutenção.</div>
+      <button class="btn pequeno primario" id="instalar-inicio">Como instalar</button></div>` : ''}
     ${convidarPush ? html`<div class="aviso info" id="convite-push" style="margin-bottom:1rem"><span class="icone">📲</span>
       <div style="flex:1">Receba os avisos da manutenção no celular, mesmo com o sistema fechado. <a href="#/notificacoes">Ativar notificações</a></div>
       <button class="btn pequeno" id="dispensar-push" aria-label="Dispensar">Agora não</button></div>` : ''}
@@ -57,6 +61,9 @@ export async function mostrar(el) {
       ${kpi('Inspeções vencidas', r.inspecoes_vencidas, { classe: r.inspecoes_vencidas ? 'atencao' : 'bom', href: '#/inspecoes' })}
       ${kpi('Problemas crônicos', r.cronicos, { href: '#/quartos?com_problemas=1' })}
       ${kpi('Custo (30 dias)', moeda(r.custo_30d))}
+      ${r.orcamento_mes?.previsto ? kpi('Orçamento do mês', `${Math.round((r.orcamento_mes.custo / r.orcamento_mes.previsto) * 100)}%`, {
+        detalhe: `${moeda(r.orcamento_mes.custo)} de ${moeda(r.orcamento_mes.previsto)}`,
+        classe: r.orcamento_mes.custo > r.orcamento_mes.previsto ? 'alerta' : r.orcamento_mes.custo > r.orcamento_mes.previsto * 0.8 ? 'atencao' : 'bom' }) : ''}
     </div>
     ${recorrencia?.alertas.filter((a) => a.nivel === 'critico').slice(0, 3).map((a) => html`
       <div class="aviso danger" style="margin-bottom:.75rem"><span class="icone">↻</span><div><strong>Recorrência crítica — ${a.hotel_nome}, quarto ${a.quarto_numero}</strong><br>${a.recomendacao} <a href="#/recorrencia">Ver análise</a></div></div>`)}
@@ -73,6 +80,7 @@ export async function mostrar(el) {
           <div class="muted small" title="${dataHora(n.criado_em)}">${relativo(n.criado_em)}</div></li>`)}</ul>` : html`<p class="vazio">Sem notificações.</p>`}
       </section>
     </div>`);
+  el.querySelector('#instalar-inicio')?.addEventListener('click', instalar);
   el.querySelector('#dispensar-push')?.addEventListener('click', () => {
     try { localStorage.setItem(CHAVE_CONVITE, '1'); } catch { /* sem armazenamento local */ }
     el.querySelector('#convite-push')?.remove();

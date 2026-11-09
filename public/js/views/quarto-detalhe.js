@@ -6,7 +6,7 @@ import {
 } from '../ui.js';
 import { kpi } from './componentes.js';
 
-const TIPO_HIST = { manutencao: 'Manutenção', inspecao: 'Inspeção', bloqueio: 'Bloqueio', liberacao: 'Liberação', cronico: 'Problema crônico' };
+const TIPO_HIST = { manutencao: 'Manutenção', inspecao: 'Inspeção', bloqueio: 'Bloqueio', liberacao: 'Liberação', cronico: 'Problema crônico', avaliacao: 'Avaliação de hóspede' };
 
 function formModal(titulo, corpo, enviar) {
   const { el, fechar } = modal(html`<h2>${titulo}</h2><form class="form" id="f-m">${corpo}
@@ -19,7 +19,7 @@ function formModal(titulo, corpo, enviar) {
 }
 
 export async function mostrar(el, [id]) {
-  const [q, gal] = await Promise.all([api(`/api/quartos/${id}`), api(`/api/quartos/${id}/galeria`)]);
+  const [q, gal, aval] = await Promise.all([api(`/api/quartos/${id}`), api(`/api/quartos/${id}/galeria`), api(`/api/quartos/${id}/avaliacoes`)]);
   const M = estado.meta;
   const abertas = q.os.filter((o) => !M.STATUS_FINAIS.includes(o.status));
   const podeGerir = papel('gerente', 'admin', 'diretoria');
@@ -36,6 +36,7 @@ export async function mostrar(el, [id]) {
       <div class="acoes-topo">
         ${papel('gerente', 'governanta', 'admin', 'manutencao_chefe') ? html`<a class="btn primario" href="#/os/nova?quarto_id=${q.id}&hotel_id=${q.hotel_id}">+ Solicitar manutenção</a>` : ''}
         ${podeGerir && !papel('diretoria') ? html`<button class="btn" id="editar-quarto">Editar</button>` : ''}
+        <a class="btn" href="#/qrcodes?hotel_id=${q.hotel_id}" title="Etiquetas de QR code para a porta">▦ QR code</a>
         ${podeInspecionar ? html`<button class="btn" id="inspecionar">Inspecionar agora</button>` : ''}
         ${q.status_comercial === 'bloqueado' && podeGerir ? html`<button class="btn sucesso" id="liberar">Liberar para comercialização</button>` : ''}
         ${q.status_comercial === 'liberado' && papel('gerente', 'admin', 'manutencao_chefe', 'diretoria') ? html`<button class="btn perigo" id="bloquear">Bloquear</button>` : ''}
@@ -84,6 +85,10 @@ export async function mostrar(el, [id]) {
         </section>
       </div>
       <div class="pilha">
+        <section class="card">
+          <div class="card-titulo"><h2>Avaliações de hóspedes${aval.media ? html` <span class="muted">· média ${numero(aval.media, 1)}/5</span>` : ''}</h2>${papel('admin', 'gerente', 'governanta') ? html`<button class="btn pequeno" id="nova-avaliacao">+ Registrar</button>` : ''}</div>
+          ${aval.itens.length ? html`<ul class="lista-simples">${aval.itens.slice(0, 6).map((a) => html`<li><strong>${'★'.repeat(a.nota)}${'☆'.repeat(5 - a.nota)}</strong> <span class="muted small">${M.ORIGENS_AVALIACAO[a.origem]} · ${data(a.data)}</span>${a.comentario ? html`<div class="small">${a.comentario}</div>` : ''}${a.protocolo ? html`<div class="small">→ <a href="#/os/${a.os_id}">${a.protocolo}</a></div>` : ''}</li>`)}</ul>` : html`<p class="muted small">Nenhuma avaliação registrada.</p>`}
+        </section>
         <section class="card">
           <div class="card-titulo"><h2>Classificação</h2>${podeGerir ? html`<button class="btn pequeno" id="estrelas">Ajustar</button>` : ''}</div>
           <p style="font-size:1.5rem;margin:0">${estrelas(q.estrelas)}</p>
@@ -136,6 +141,25 @@ export async function mostrar(el, [id]) {
     $('#excluir-quarto', m)?.addEventListener('click', async (e) => {
       if (e.target.dataset.confirmar !== '1') { e.target.dataset.confirmar = '1'; e.target.textContent = 'Confirmar exclusão'; return; }
       try { await post(`/api/quartos/${q.id}/excluir`); fechar(); toast(`Quarto ${q.numero} excluído.`); location.hash = '#/quartos'; } catch (err) { erro(err); }
+    });
+  });
+  $('#nova-avaliacao', el)?.addEventListener('click', () => {
+    const { el: m, fechar } = modal(html`<h2>Avaliação / reclamação de hóspede — quarto ${q.numero}</h2><form class="form" id="f-aval">
+      <div class="form-grade"><label class="campo"><span class="obrig">Nota</span><select name="nota" required>${opcoes({ 5: '★★★★★ (5)', 4: '★★★★ (4)', 3: '★★★ (3)', 2: '★★ (2)', 1: '★ (1)' }, '')}</select></label>
+        <label class="campo"><span class="obrig">Origem</span><select name="origem" required>${opcoes(M.ORIGENS_AVALIACAO, '', { vazio: 'Selecione…' })}</select></label>
+        <label class="campo"><span>Data</span><input type="datetime-local" name="data" value="${paraInputData(new Date().toISOString())}"></label>
+        <label class="campo"><span>Categoria do problema</span><select name="categoria">${opcoes(M.CATEGORIAS, '', { vazio: 'Nenhum problema de manutenção' })}</select></label></div>
+      <label class="campo"><span>Comentário do hóspede</span><textarea name="comentario" rows="3"></textarea></label>
+      <label class="check"><input type="checkbox" name="gerar_os"> Gerar solicitação de manutenção a partir desta reclamação</label>
+      <div class="aviso danger" id="erro-aval" hidden></div>
+      <div class="rodape-modal"><button type="button" class="btn" data-fechar>Cancelar</button><button class="btn primario" type="submit">Registrar</button></div></form>`.s);
+    $('#f-aval', m).addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        const r = await post(`/api/quartos/${q.id}/avaliacoes`, dadosForm(e.target));
+        fechar(); toast(r.os_id ? 'Avaliação registrada e solicitação de manutenção aberta.' : 'Avaliação registrada.');
+        if (r.os_id) location.hash = `#/os/${r.os_id}`; else recarregar();
+      } catch (err) { const x = $('#erro-aval', m); x.textContent = err.message; x.hidden = false; }
     });
   });
   $('#add-padrao', el)?.addEventListener('click', () => {

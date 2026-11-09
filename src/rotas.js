@@ -1,5 +1,5 @@
 import { Roteador } from './http.js';
-import { transacao, todos } from './db.js';
+import { transacao, todos, um } from './db.js';
 import { meta } from './domain/constantes.js';
 import { exigir, exigirHotel, filtroHotel } from './domain/comum.js';
 import * as usuarios from './domain/usuarios.js';
@@ -9,6 +9,12 @@ import * as fotos from './domain/fotos.js';
 import * as inspecoes from './domain/inspecoes.js';
 import * as notificacoes from './domain/notificacoes.js';
 import * as push from './domain/push.js';
+import * as auditoria from './domain/auditoria.js';
+import * as backup from './domain/backup.js';
+import * as preventiva from './domain/preventiva.js';
+import * as estoque from './domain/estoque.js';
+import * as hospedes from './domain/hospedes.js';
+import { ErroHttp } from './domain/comum.js';
 import { analise as analiseRecorrencia, ocorrenciasRelacionadas } from './domain/recorrencia.js';
 import { indicadores, rede, resumoInicial } from './domain/indicadores.js';
 
@@ -17,6 +23,11 @@ import { indicadores, rede, resumoInicial } from './domain/indicadores.js';
 export function criarRotas() {
   const r = new Roteador();
   const get = (p, h) => r.get(p, h);
+  // Auditoria: registrada na mesma transação da ação (se a ação falhar, o registro também é desfeito).
+  const aud = (db, usuario, acao, dados) => auditoria.registrar(db, usuario, acao, dados);
+  const alvoUsuario = (db, id) => um(db, 'SELECT login, hotel_id, ativo FROM usuarios WHERE id = ?', Number(id));
+  const alvoQuarto = (db, id) => um(db, 'SELECT numero, hotel_id FROM quartos WHERE id = ?', Number(id));
+  const alvoItem = (db, id) => um(db, 'SELECT item, hotel_id, ativo FROM checklist_modelo WHERE id = ?', Number(id));
   const post = (p, h) => r.post(p, Object.assign(h, { mutacao: true }));
   const put = (p, h) => r.put(p, Object.assign(h, { mutacao: true }));
 
@@ -32,22 +43,22 @@ export function criarRotas() {
 
   // ---- cadastros ----
   get('/api/hoteis', ({ db, usuario }) => usuarios.listarHoteis(db, usuario));
-  post('/api/hoteis', ({ db, usuario, body }) => ({ id: usuarios.criarHotel(db, usuario, body) }));
-  put('/api/hoteis/:id', ({ db, usuario, params, body }) => { usuarios.atualizarHotel(db, usuario, params.id, body); return { ok: true }; });
+  post('/api/hoteis', ({ db, usuario, body }) => { const id = usuarios.criarHotel(db, usuario, body); aud(db, usuario, 'hotel_criado', { hotel_id: id, alvo: body.nome }); return { id }; });
+  put('/api/hoteis/:id', ({ db, usuario, params, body }) => { usuarios.atualizarHotel(db, usuario, params.id, body); aud(db, usuario, 'hotel_alterado', { hotel_id: Number(params.id), detalhes: body }); return { ok: true }; });
   get('/api/usuarios', ({ db, usuario, query }) => usuarios.listarUsuarios(db, usuario, query));
-  post('/api/usuarios', ({ db, usuario, body }) => ({ id: usuarios.criarUsuario(db, usuario, body) }));
-  post('/api/usuarios/:id/excluir', ({ db, usuario, params }) => usuarios.excluirUsuario(db, usuario, params.id));
-  post('/api/usuarios/:id/alternar', ({ db, usuario, params }) => { usuarios.alternarAtivo(db, usuario, params.id); return { ok: true }; });
+  post('/api/usuarios', ({ db, usuario, body }) => { const id = usuarios.criarUsuario(db, usuario, body); const a = alvoUsuario(db, id); aud(db, usuario, 'usuario_criado', { hotel_id: a.hotel_id, alvo: a.login, detalhes: { papel: body.papel } }); return { id }; });
+  post('/api/usuarios/:id/excluir', ({ db, usuario, params }) => { const a = alvoUsuario(db, params.id); const r = usuarios.excluirUsuario(db, usuario, params.id); aud(db, usuario, 'usuario_excluido', { hotel_id: a?.hotel_id, alvo: a?.login, detalhes: r }); return r; });
+  post('/api/usuarios/:id/alternar', ({ db, usuario, params }) => { usuarios.alternarAtivo(db, usuario, params.id); const a = alvoUsuario(db, params.id); aud(db, usuario, a?.ativo ? 'usuario_ativado' : 'usuario_desativado', { hotel_id: a?.hotel_id, alvo: a?.login }); return { ok: true }; });
 
   // ---- quartos ----
   get('/api/quartos', ({ db, usuario, query }) => quartos.listar(db, usuario, query));
-  post('/api/quartos', ({ db, usuario, body }) => ({ id: quartos.criar(db, usuario, body) }));
-  post('/api/quartos/lote', ({ db, usuario, body }) => quartos.criarLote(db, usuario, body));
-  post('/api/quartos/numeracao', ({ db, usuario, body }) => quartos.definirNumeracao(db, usuario, body));
-  put('/api/quartos/:id', ({ db, usuario, params, body }) => { quartos.editar(db, usuario, Number(params.id), body); return { ok: true }; });
-  post('/api/quartos/:id/excluir', ({ db, usuario, params }) => { quartos.excluir(db, usuario, Number(params.id)); return { ok: true }; });
-  post('/api/eu/senha', ({ db, usuario, body }) => { usuarios.alterarSenha(db, usuario, body); return { ok: true }; });
-  post('/api/usuarios/:id/senha', ({ db, usuario, params, body }) => { usuarios.redefinirSenha(db, usuario, params.id, body.senha); return { ok: true }; });
+  post('/api/quartos', ({ db, usuario, body }) => { const id = quartos.criar(db, usuario, body); aud(db, usuario, 'quarto_criado', { hotel_id: Number(body.hotel_id), alvo: body.numero }); return { id }; });
+  post('/api/quartos/lote', ({ db, usuario, body }) => { const r = quartos.criarLote(db, usuario, body); aud(db, usuario, 'quarto_criado', { hotel_id: Number(body.hotel_id), alvo: body.inicio + '–' + body.fim, detalhes: { criados: r.criados } }); return r; });
+  post('/api/quartos/numeracao', ({ db, usuario, body }) => { const r = quartos.definirNumeracao(db, usuario, body); aud(db, usuario, 'numeracao_definida', { hotel_id: Number(body.hotel_id || usuario.hotel_id), detalhes: { faixas: body.faixas, ...r } }); return r; });
+  put('/api/quartos/:id', ({ db, usuario, params, body }) => { const a = alvoQuarto(db, params.id); quartos.editar(db, usuario, Number(params.id), body); aud(db, usuario, 'quarto_editado', { hotel_id: a?.hotel_id, alvo: a?.numero, detalhes: body }); return { ok: true }; });
+  post('/api/quartos/:id/excluir', ({ db, usuario, params }) => { const a = alvoQuarto(db, params.id); quartos.excluir(db, usuario, Number(params.id)); aud(db, usuario, 'quarto_excluido', { hotel_id: a?.hotel_id, alvo: a?.numero }); return { ok: true }; });
+  post('/api/eu/senha', ({ db, usuario, body }) => { usuarios.alterarSenha(db, usuario, body); aud(db, usuario, 'senha_alterada', { hotel_id: usuario.hotel_id, alvo: usuario.login }); return { ok: true }; });
+  post('/api/usuarios/:id/senha', ({ db, usuario, params, body }) => { usuarios.redefinirSenha(db, usuario, params.id, body.senha); const a = alvoUsuario(db, params.id); aud(db, usuario, 'senha_redefinida', { hotel_id: a?.hotel_id, alvo: a?.login }); return { ok: true }; });
   post('/api/quartos/programar-inspecao', ({ db, usuario, body }) => {
     let ids = Array.isArray(body.quarto_ids) ? body.quarto_ids.map(Number) : [];
     if (!ids.length && body.hotel_id) {
@@ -63,8 +74,8 @@ export function criarRotas() {
     const q = quartos.detalhe(db, usuario, Number(params.id));
     return ocorrenciasRelacionadas(db, { quarto_id: q.id, equipamento_id: query.equipamento_id ? Number(query.equipamento_id) : null, categoria: query.categoria });
   });
-  post('/api/quartos/:id/bloquear', ({ db, usuario, params, body }) => ({ id: quartos.bloquear(db, usuario, Number(params.id), { motivo: body.motivo }) }));
-  post('/api/quartos/:id/liberar', ({ db, usuario, params, body }) => ({ liberados: quartos.liberar(db, usuario, Number(params.id), { observacao: body.observacao }) }));
+  post('/api/quartos/:id/bloquear', ({ db, usuario, params, body }) => { const id = quartos.bloquear(db, usuario, Number(params.id), { motivo: body.motivo }); const a = alvoQuarto(db, params.id); aud(db, usuario, 'quarto_bloqueado', { hotel_id: a?.hotel_id, alvo: a?.numero, detalhes: body.motivo }); return { id }; });
+  post('/api/quartos/:id/liberar', ({ db, usuario, params, body }) => { const liberados = quartos.liberar(db, usuario, Number(params.id), { observacao: body.observacao }); const a = alvoQuarto(db, params.id); aud(db, usuario, 'quarto_liberado', { hotel_id: a?.hotel_id, alvo: a?.numero, detalhes: body.observacao }); return { liberados }; });
   post('/api/quartos/:id/estrelas', ({ db, usuario, params, body }) => { quartos.definirEstrelas(db, usuario, Number(params.id), body.estrelas); return { ok: true }; });
   post('/api/quartos/:id/equipamentos', ({ db, usuario, params, body }) => ({ id: quartos.adicionarEquipamento(db, usuario, Number(params.id), body) }));
   post('/api/equipamentos/:id/substituir', ({ db, usuario, params, body }) => ({ id: quartos.substituirEquipamento(db, usuario, Number(params.id), body) }));
@@ -107,9 +118,9 @@ export function criarRotas() {
     exigirHotel(usuario, hotelId);
     return { hotel_id: hotelId, ...inspecoes.checklistDoHotel(db, hotelId, { incluirInativos: true }) };
   });
-  post('/api/checklist', ({ db, usuario, body }) => ({ id: inspecoes.adicionarItemChecklist(db, usuario, body) }));
-  post('/api/checklist/:id/alternar', ({ db, usuario, params }) => { inspecoes.alternarItemChecklist(db, usuario, params.id); return { ok: true }; });
-  post('/api/checklist/:id/excluir', ({ db, usuario, params }) => { inspecoes.excluirItemChecklist(db, usuario, params.id); return { ok: true }; });
+  post('/api/checklist', ({ db, usuario, body }) => { const id = inspecoes.adicionarItemChecklist(db, usuario, body); const a = alvoItem(db, id); aud(db, usuario, 'checklist_incluido', { hotel_id: a?.hotel_id, alvo: a?.item }); return { id }; });
+  post('/api/checklist/:id/alternar', ({ db, usuario, params }) => { inspecoes.alternarItemChecklist(db, usuario, params.id); const a = alvoItem(db, params.id); aud(db, usuario, 'checklist_alternado', { hotel_id: a?.hotel_id, alvo: a?.item, detalhes: { ativo: a?.ativo } }); return { ok: true }; });
+  post('/api/checklist/:id/excluir', ({ db, usuario, params }) => { const a = alvoItem(db, params.id); inspecoes.excluirItemChecklist(db, usuario, params.id); aud(db, usuario, 'checklist_excluido', { hotel_id: a?.hotel_id, alvo: a?.item }); return { ok: true }; });
 
   // ---- problemas crônicos ----
   get('/api/cronicos', ({ db, usuario, query }) => {
@@ -126,6 +137,39 @@ export function criarRotas() {
   get('/api/recorrencia', ({ db, usuario, query }) => analiseRecorrencia(db, usuario, query));
   get('/api/indicadores', ({ db, usuario, query }) => indicadores(db, usuario, query));
   get('/api/rede', ({ db, usuario, query }) => rede(db, usuario, query));
+
+  // ---- backups (somente administrador) ----
+  get('/api/backups', ({ usuario, ctx }) => {
+    if (usuario.papel !== 'admin') throw new ErroHttp(403, 'Somente o administrador acessa os backups.');
+    return { retencao: backup.RETENCAO, itens: backup.listar(ctx.dataDir) };
+  });
+  r.post('/api/backups', async ({ db, usuario, ctx }) => {
+    if (usuario.papel !== 'admin') throw new ErroHttp(403, 'Somente o administrador gera backups.');
+    const nome = await backup.gerar(db, ctx.dataDir, { manual: true });
+    auditoria.registrar(db, usuario, 'backup_gerado', { alvo: nome });
+    return { nome };
+  });
+
+  // ---- manutenção preventiva ----
+  get('/api/preventiva', ({ db, usuario, query }) => preventiva.listar(db, usuario, query));
+  post('/api/preventiva', ({ db, usuario, body }) => { const id = preventiva.criarPlano(db, usuario, body); aud(db, usuario, 'preventiva_criada', { hotel_id: Number(body.hotel_id || usuario.hotel_id), alvo: body.nome, detalhes: { periodicidade: body.periodicidade_dias } }); return { id }; });
+  put('/api/preventiva/:id', ({ db, usuario, params, body }) => { const p = preventiva.alterarPlano(db, usuario, params.id, body); aud(db, usuario, 'preventiva_alterada', { hotel_id: p.hotel_id, alvo: p.nome, detalhes: body }); return { ok: true }; });
+  post('/api/preventiva/:id/excluir', ({ db, usuario, params }) => { const p = preventiva.excluirPlano(db, usuario, params.id); aud(db, usuario, 'preventiva_excluida', { hotel_id: p.hotel_id, alvo: p.nome }); return { ok: true }; });
+
+  // ---- avaliações de hóspedes ----
+  get('/api/quartos/:id/avaliacoes', ({ db, usuario, params }) => { quartos.detalhe(db, usuario, Number(params.id)); return hospedes.doQuarto(db, Number(params.id)); });
+  post('/api/quartos/:id/avaliacoes', ({ db, usuario, params, body }) => hospedes.registrar(db, usuario, Number(params.id), body));
+  post('/api/avaliacoes/:id/excluir', ({ db, usuario, params }) => { hospedes.excluir(db, usuario, params.id); return { ok: true }; });
+  get('/api/avaliacoes/criticos', ({ db, usuario, query }) => hospedes.quartosCriticos(db, usuario, query));
+
+  // ---- estoque ----
+  get('/api/estoque', ({ db, usuario, query }) => estoque.listar(db, usuario, query));
+  get('/api/estoque/:id/movimentos', ({ db, usuario, params }) => estoque.movimentos(db, usuario, params.id));
+  post('/api/estoque', ({ db, usuario, body }) => { const id = estoque.salvarItem(db, usuario, body); const it = um(db, 'SELECT nome, hotel_id FROM estoque_itens WHERE id = ?', id); aud(db, usuario, 'estoque_item', { hotel_id: it.hotel_id, alvo: it.nome, detalhes: body }); return { id }; });
+  post('/api/estoque/:id/movimentar', ({ db, usuario, params, body }) => { const r = estoque.movimentar(db, usuario, params.id, body); aud(db, usuario, 'estoque_movimento', { hotel_id: r.item.hotel_id, alvo: r.item.nome, detalhes: { tipo: body.tipo, quantidade: body.quantidade, saldo: r.item.quantidade } }); return r; });
+
+  // ---- auditoria ----
+  get('/api/auditoria', ({ db, usuario, query }) => ({ acoes: auditoria.ACOES_AUDITORIA, itens: auditoria.listar(db, usuario, query) }));
 
   // ---- notificações push no celular ----
   get('/api/push/chave', ({ db }) => ({ publica: push.chavesVapid(db).publica }));

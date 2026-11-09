@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS hoteis (
   cidade TEXT,
   logo TEXT,                              -- pasta em public/img/hoteis/
   exige_validacao INTEGER NOT NULL DEFAULT 1,
+  limite_aprovacao_gerente REAL NOT NULL DEFAULT 0, -- orçamentos até este valor o gerente aprova
+  orcamento_mensal REAL,                            -- previsto de manutenção por mês (R$)
   ativo INTEGER NOT NULL DEFAULT 1
 );
 
@@ -27,7 +29,8 @@ CREATE TABLE IF NOT EXISTS usuarios (
   papel TEXT NOT NULL,
   hotel_id INTEGER REFERENCES hoteis(id),
   ativo INTEGER NOT NULL DEFAULT 1,
-  excluido_em TEXT
+  excluido_em TEXT,
+  trocar_senha INTEGER NOT NULL DEFAULT 1  -- senha provisória: obriga a troca no próximo acesso
 );
 
 -- Aparelhos com notificações push ativadas (um registro por navegador/celular).
@@ -100,7 +103,8 @@ CREATE TABLE IF NOT EXISTS ordens_servico (
   prazo_previsto TEXT,
   observacoes TEXT,
   status TEXT NOT NULL,
-  origem TEXT NOT NULL DEFAULT 'manual',  -- manual | inspecao
+  origem TEXT NOT NULL DEFAULT 'manual',  -- manual | inspecao | preventiva | hospede
+  plano_preventiva_id INTEGER,
   inspecao_item_id INTEGER,
   os_origem_id INTEGER REFERENCES ordens_servico(id),
   recorrente INTEGER NOT NULL DEFAULT 0,
@@ -294,6 +298,85 @@ CREATE TABLE IF NOT EXISTS quarto_historico (
   criado_em TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_hist_quarto ON quarto_historico(quarto_id, criado_em);
+
+-- Registro de ações administrativas (quem alterou o quê e quando).
+CREATE TABLE IF NOT EXISTS auditoria (
+  id INTEGER PRIMARY KEY,
+  usuario_id INTEGER REFERENCES usuarios(id),
+  hotel_id INTEGER REFERENCES hoteis(id),
+  acao TEXT NOT NULL,
+  alvo TEXT,
+  detalhes TEXT,
+  criado_em TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_auditoria ON auditoria(hotel_id, criado_em);
+
+-- Manutenção preventiva: planos recorrentes e a agenda de cada quarto (ou da área comum).
+CREATE TABLE IF NOT EXISTS planos_preventiva (
+  id INTEGER PRIMARY KEY,
+  hotel_id INTEGER NOT NULL REFERENCES hoteis(id),
+  nome TEXT NOT NULL,
+  descricao TEXT,
+  categoria TEXT NOT NULL,
+  local TEXT NOT NULL,
+  equipamento TEXT,
+  escopo TEXT NOT NULL DEFAULT 'quartos',  -- quartos | area
+  periodicidade_dias INTEGER NOT NULL,
+  prioridade TEXT NOT NULL DEFAULT 'baixa',
+  ativo INTEGER NOT NULL DEFAULT 1,
+  criado_por INTEGER REFERENCES usuarios(id),
+  criado_em TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS preventiva_agenda (
+  id INTEGER PRIMARY KEY,
+  plano_id INTEGER NOT NULL REFERENCES planos_preventiva(id),
+  quarto_id INTEGER REFERENCES quartos(id),
+  proxima_em TEXT NOT NULL,
+  ultima_os_id INTEGER REFERENCES ordens_servico(id),
+  UNIQUE (plano_id, quarto_id)
+);
+
+-- Avaliações e reclamações de hóspedes por quarto (registro manual).
+CREATE TABLE IF NOT EXISTS avaliacoes_hospedes (
+  id INTEGER PRIMARY KEY,
+  hotel_id INTEGER NOT NULL REFERENCES hoteis(id),
+  quarto_id INTEGER NOT NULL REFERENCES quartos(id),
+  data TEXT NOT NULL,
+  nota INTEGER NOT NULL,
+  origem TEXT NOT NULL,
+  categoria TEXT,
+  comentario TEXT,
+  os_id INTEGER REFERENCES ordens_servico(id),
+  registrado_por INTEGER REFERENCES usuarios(id),
+  criado_em TEXT NOT NULL
+);
+
+-- Estoque de materiais por hotel.
+CREATE TABLE IF NOT EXISTS estoque_itens (
+  id INTEGER PRIMARY KEY,
+  hotel_id INTEGER NOT NULL REFERENCES hoteis(id),
+  nome TEXT NOT NULL,
+  unidade TEXT NOT NULL DEFAULT 'un',
+  quantidade REAL NOT NULL DEFAULT 0,
+  minimo REAL NOT NULL DEFAULT 0,
+  custo_unitario REAL NOT NULL DEFAULT 0,
+  fornecedor TEXT,
+  alerta_minimo_em TEXT,
+  ativo INTEGER NOT NULL DEFAULT 1,
+  UNIQUE (hotel_id, nome)
+);
+CREATE TABLE IF NOT EXISTS estoque_movimentos (
+  id INTEGER PRIMARY KEY,
+  item_id INTEGER NOT NULL REFERENCES estoque_itens(id),
+  tipo TEXT NOT NULL,                 -- entrada | saida | ajuste
+  quantidade REAL NOT NULL,
+  custo_unitario REAL,
+  fornecedor TEXT,
+  os_id INTEGER REFERENCES ordens_servico(id),
+  observacao TEXT,
+  usuario_id INTEGER REFERENCES usuarios(id),
+  criado_em TEXT NOT NULL
+);
 `;
 
 export function abrirBanco(caminho = ':memory:') {
@@ -316,6 +399,13 @@ function migrar(db) {
   if (!colHoteis.includes('logo')) db.exec('ALTER TABLE hoteis ADD COLUMN logo TEXT');
   const colQuartos = db.prepare('PRAGMA table_info(quartos)').all().map((c) => c.name);
   if (!colQuartos.includes('numeracao_provisoria')) db.exec('ALTER TABLE quartos ADD COLUMN numeracao_provisoria INTEGER NOT NULL DEFAULT 0');
+  // Senhas iniciais circularam por arquivo: todos os usuários existentes trocam no próximo acesso.
+  const colUsuarios2 = db.prepare('PRAGMA table_info(usuarios)').all().map((c) => c.name);
+  if (!colUsuarios2.includes('trocar_senha')) db.exec('ALTER TABLE usuarios ADD COLUMN trocar_senha INTEGER NOT NULL DEFAULT 1');
+  if (!colHoteis.includes('limite_aprovacao_gerente')) db.exec('ALTER TABLE hoteis ADD COLUMN limite_aprovacao_gerente REAL NOT NULL DEFAULT 0');
+  if (!colHoteis.includes('orcamento_mensal')) db.exec('ALTER TABLE hoteis ADD COLUMN orcamento_mensal REAL');
+  const colOs = db.prepare('PRAGMA table_info(ordens_servico)').all().map((c) => c.name);
+  if (!colOs.includes('plano_preventiva_id')) db.exec('ALTER TABLE ordens_servico ADD COLUMN plano_preventiva_id INTEGER');
 }
 
 // Versões anteriores usavam e-mail (e depois e-mail + login). O login passa a ser a parte do

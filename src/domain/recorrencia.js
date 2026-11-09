@@ -22,7 +22,7 @@ export function ocorrenciasRelacionadas(db, { quarto_id, equipamento_id, categor
     `SELECT o.id, o.protocolo, o.titulo, o.status, o.criado_em, o.concluido_em, o.encerrado_em, o.reaberturas,
        (SELECT COALESCE(SUM(valor), 0) FROM os_custos WHERE os_id = o.id) AS custo
      FROM ordens_servico o
-     WHERE o.quarto_id = ? AND ${filtro} AND o.id <> ? AND o.status NOT IN ${IGNORADOS}
+     WHERE o.quarto_id = ? AND ${filtro} AND o.id <> ? AND o.status NOT IN ${IGNORADOS} AND o.origem <> 'preventiva'
        AND o.criado_em >= ? AND o.criado_em <= ?
      ORDER BY o.criado_em`,
     quarto_id, ...params, excluir_id, desde, ref
@@ -41,7 +41,7 @@ function carregarBase(db, usuario, filtros, agora) {
        (SELECT COALESCE(SUM(valor), 0) FROM os_custos WHERE os_id = o.id) AS custo
      FROM ordens_servico o JOIN hoteis h ON h.id = o.hotel_id
      LEFT JOIN quartos q ON q.id = o.quarto_id LEFT JOIN equipamentos e ON e.id = o.equipamento_id
-     WHERE o.status NOT IN ${IGNORADOS} AND o.criado_em >= ? ${f.sql}
+     WHERE o.status NOT IN ${IGNORADOS} AND o.origem <> 'preventiva' AND o.criado_em >= ? ${f.sql}
      ORDER BY o.criado_em`,
     desde, ...f.params
   );

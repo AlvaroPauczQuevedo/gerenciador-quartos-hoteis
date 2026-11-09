@@ -3,6 +3,7 @@ import { todos } from '../db.js';
 import { CATEGORIAS, PRIORIDADES, STATUS, STATUS_FINAIS, STATUS_ENTREGUES } from './constantes.js';
 import { agoraIso, somarDias, filtroHotel, normalizarData, horasEntre } from './comum.js';
 import { analise as analiseRecorrencia } from './recorrencia.js';
+import { mediaPorHotel, quartosCriticos } from './hospedes.js';
 
 const media = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 const pct = (a, b) => (b ? (a / b) * 100 : null);
@@ -142,6 +143,8 @@ export function rede(db, usuario, filtros = {}, agora) {
       atrasadas_agora: pend.filter((p) => !STATUS_ENTREGUES.includes(p.status) && p.prazo_previsto && p.prazo_previsto < now).length,
       alertas_recorrencia: recorr.alertas.filter((a) => a.hotel_id === h.id).length,
       custo_por_quarto: qs.length ? r.custo_total / qs.length : null,
+      orcamento_mes: orcamentoDoMes(db, [h.id], agora),
+      nota_hospedes: mediaPorHotel(db, h.id, {}, agora),
       ...r,
     };
   });
@@ -170,10 +173,28 @@ export function rede(db, usuario, filtros = {}, agora) {
     equipes: agruparResumo(os.filter((o) => o.responsavel_id), (o) => o.responsavel_id, (k, l) => `${l[0].responsavel_nome} (${l[0].hotel_nome})`, now),
     problemasComuns,
     baixaAvaliacao,
+    hospedesCriticos: quartosCriticos(db, usuario, { hotel_id: filtros.hotel_id }, agora),
   };
 }
 
 // Respostas diretas às perguntas da seção 21, para o painel inicial.
+// Início do mês corrente no horário de Brasília (UTC-3), em ISO UTC.
+export function inicioDoMes(agora) {
+  const [ano, mes] = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit' })
+    .format(agora ? new Date(agora) : new Date()).split('-');
+  return new Date(Date.UTC(Number(ano), Number(mes) - 1, 1, 3)).toISOString();
+}
+
+// Custo de manutenção do mês contra o orçamento mensal previsto, por hotel.
+export function orcamentoDoMes(db, hotelIds, agora) {
+  if (!hotelIds.length) return { custo: 0, previsto: null };
+  const ph = hotelIds.map(() => '?').join(',');
+  const custo = todos(db, `SELECT COALESCE(SUM(c.valor), 0) AS v FROM os_custos c JOIN ordens_servico o ON o.id = c.os_id
+    WHERE c.criado_em >= ? AND o.hotel_id IN (${ph})`, inicioDoMes(agora), ...hotelIds)[0].v;
+  const previstos = todos(db, `SELECT orcamento_mensal AS v FROM hoteis WHERE id IN (${ph}) AND orcamento_mensal IS NOT NULL`, ...hotelIds);
+  return { custo, previsto: previstos.length ? previstos.reduce((t, r) => t + r.v, 0) : null };
+}
+
 export function resumoInicial(db, usuario, agora) {
   const now = agoraIso(agora);
   const f = filtroHotel(usuario, 'q.hotel_id');
@@ -197,5 +218,6 @@ export function resumoInicial(db, usuario, agora) {
     aguardando_autorizacao: abertas.filter((o) => o.status === 'aguardando_autorizacao').length,
     cronicos,
     custo_30d: custo30,
+    orcamento_mes: orcamentoDoMes(db, todos(db, `SELECT id FROM hoteis WHERE 1 = 1 ${filtroHotel(usuario, 'id').sql}`, ...filtroHotel(usuario, 'id').params).map((h) => h.id), agora),
   };
 }

@@ -2,6 +2,7 @@
 import { todos, exec } from '../db.js';
 import { STATUS_ENTREGUES } from './constantes.js';
 import { agoraIso, somarHoras } from './comum.js';
+import { gerar as gerarPreventivas } from './preventiva.js';
 import { notificar, equipeManutencao, gerentesDoHotel, usuariosDoHotel } from './notificacoes.js';
 
 const ENTREGUES_SQL = STATUS_ENTREGUES.map((s) => `'${s}'`).join(',');
@@ -29,6 +30,9 @@ export function verificar(db, agora) {
       exec(db, 'UPDATE ordens_servico SET alerta_prazo_em = ? WHERE id = ?', now, os.id);
     }
   }
+
+  // Manutenção preventiva: gera as OS dos planos que venceram.
+  enviados += gerarPreventivas(db, agora);
 
   // Inspeções vencidas: um único aviso por hotel a cada rodada, com a lista de quartos.
   const vencidas = todos(db, 'SELECT * FROM quartos WHERE proxima_inspecao_em < ? AND alerta_inspecao_enviado_em IS NULL ORDER BY hotel_id, CAST(numero AS INTEGER), numero', now);

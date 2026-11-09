@@ -38,6 +38,9 @@ const FORMS = {
   solicitar_material: () => linhasMateriais(),
   materiais_disponiveis: () => campoTexto('Observação', false),
   registrar_dificuldade: () => campoTexto('Dificuldade encontrada'),
+  baixar_estoque: (os) => html`<label class="campo"><span class="obrig">Material</span><select name="item_id" required><option value="">Selecione…</option>${os.estoque.map((i) => html`<option value="${i.id}">${i.nome} — saldo ${i.quantidade} ${i.unidade} (${moeda(i.custo_unitario)}/${i.unidade})</option>`)}</select></label>
+    <label class="campo"><span class="obrig">Quantidade usada</span><input type="number" step="any" min="0" name="quantidade" required></label>
+    <p class="small muted">O custo é lançado nesta OS pelo custo médio do estoque e o saldo é atualizado.</p>`,
   registrar_custo: () => html`<div class="form-grade"><label class="campo"><span class="obrig">Tipo</span><select name="tipo">${opcoes(M().TIPOS_CUSTO, 'material')}</select></label>
     <label class="campo"><span class="obrig">Valor (R$)</span><input type="number" name="valor" min="0" step="0.01" required></label></div>
     <label class="campo"><span class="obrig">Descrição</span><input name="descricao" required></label>`,
@@ -103,12 +106,12 @@ export async function mostrar(el, [id]) {
   render(el, html`
     <div class="cabecalho">
       <div>
-        <p class="sub"><a href="#/os">← Demandas</a></p>
+        <p class="sub"><a href="#/os">← Demandas</a> · <a href="#/os/${os.id}/imprimir">🖨️ Imprimir / PDF</a></p>
         <h1>${os.protocolo} · ${os.titulo}</h1>
         <div style="display:flex;gap:.4rem;flex-wrap:wrap">${badgePrioridade(os.prioridade)} ${badgeStatus(os.status)} ${badgeAtraso(os)}
           ${os.recorrente ? html`<span class="badge danger sem-ponto">↻ Problema recorrente</span>` : ''}
           ${os.bloqueio_ativo ? html`<span class="badge danger">Quarto bloqueado</span>` : ''}
-          ${os.origem === 'inspecao' ? html`<span class="badge info sem-ponto">Origem: inspeção</span>` : ''}
+          ${{ inspecao: 'Origem: inspeção', preventiva: 'Preventiva programada', hospede: 'Reclamação de hóspede' }[os.origem] ? html`<span class="badge info sem-ponto">${{ inspecao: 'Origem: inspeção', preventiva: 'Preventiva programada', hospede: 'Reclamação de hóspede' }[os.origem]}</span>` : ''}
           ${os.prioridade !== os.prioridade_original ? html`<span class="badge sem-ponto">Prioridade original: ${m.PRIORIDADES[os.prioridade_original]}</span>` : ''}</div>
       </div>
     </div>

@@ -436,6 +436,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   } else if (process.argv.includes('--demo')) {
     gravarConfig(db, 'modo', 'demo');
     popular(db, { uploadsDir: join(dataDir, 'uploads') });
+    exec(db, 'UPDATE usuarios SET trocar_senha = 0'); // demonstração: senha conhecida (demo123)
     console.log('Dados de demonstração carregados. Senha de todos os usuários: demo123');
   } else {
     const caminho = gravarCredenciais(dataDir, popularPiloto(db));

@@ -20,7 +20,9 @@ export async function iniciarPWA() {
   window.addEventListener('appinstalled', () => { promptInstalacao = null; toast('App instalado! Ele está na tela inicial do aparelho.'); avisar(); });
   if (!suportaSW) return;
   try {
-    registro = await navigator.serviceWorker.register('/sw.js');
+    registro = await navigator.serviceWorker.register('/service-worker.js');
+    // Remove registros antigos de /sw.js (versão que a CDN da Hostinger entregava sem preencher).
+    for (const r of await navigator.serviceWorker.getRegistrations()) if (r.active?.scriptURL.endsWith('/sw.js')) r.unregister();
   } catch (e) {
     console.warn('Service worker não registrado:', e.message);
     return;
@@ -57,17 +59,46 @@ export async function instalar() {
     avisar();
     return;
   }
-  if (ehIOS) {
-    modal(html`<h2>Instalar no iPhone / iPad</h2>
-      <ol style="padding-left:1.2rem;line-height:1.8">
-        <li>Abra este endereço no <strong>Safari</strong>.</li>
-        <li>Toque em <strong>Compartilhar</strong> (quadrado com seta para cima).</li>
-        <li>Escolha <strong>Adicionar à Tela de Início</strong> e confirme.</li>
-        <li>Abra o app pelo ícone <strong>tri</strong> e ative as notificações em <strong>Notificações</strong>.</li>
-      </ol>
-      <p class="small muted">No iPhone, as notificações só funcionam com o app instalado (iOS 16.4 ou mais novo).</p>
-      <div class="rodape-modal"><button class="btn primario" data-fechar>Entendi</button></div>`.s);
-  }
+  if (ehIOS) modal(instrucoesIOS().s);
+}
+
+// Navegador em uso no iPhone/iPad: cada um tem o "Adicionar à Tela de Início" num lugar diferente.
+function navegadorIOS() {
+  if (/Instagram|FBAN|FBAV|LinkedInApp|Line\//.test(ua)) return 'app';
+  if (/CriOS/.test(ua)) return 'chrome';
+  if (/EdgiOS/.test(ua)) return 'edge';
+  if (/FxiOS/.test(ua)) return 'firefox';
+  return 'safari';
+}
+export const versaoIOS = () => { const m = /OS (\d+)_(\d+)/.exec(ua); return m ? { maior: Number(m[1]), menor: Number(m[2]), texto: `${m[1]}.${m[2]}` } : null; };
+const iosSemPush = (v) => v && (v.maior < 16 || (v.maior === 16 && v.menor < 4));
+
+function instrucoesIOS() {
+  const nav = navegadorIOS();
+  const versao = versaoIOS();
+  const passos = {
+    safari: html`<li>Toque no botão <strong>Compartilhar</strong> <span aria-hidden="true">(quadrado com seta para cima ⬆️)</span> na barra de baixo.</li>
+      <li>Role a lista e toque em <strong>Adicionar à Tela de Início</strong>.</li>
+      <li>Toque em <strong>Adicionar</strong> (canto superior direito).</li>`,
+    chrome: html`<li>Toque no botão <strong>Compartilhar</strong> <span aria-hidden="true">⬆️</span> ao lado do endereço, no topo.</li>
+      <li>Toque em <strong>Adicionar à Tela de Início</strong> e depois em <strong>Adicionar</strong>.</li>`,
+    edge: html`<li>Toque no menu <strong>⋯</strong> e depois em <strong>Compartilhar</strong>.</li>
+      <li>Toque em <strong>Adicionar à Tela de Início</strong> e depois em <strong>Adicionar</strong>.</li>`,
+    firefox: html`<li>Toque no menu <strong>☰</strong> e depois em <strong>Compartilhar</strong>.</li>
+      <li>Toque em <strong>Adicionar à Tela de Início</strong> e depois em <strong>Adicionar</strong>.</li>`,
+    app: html`<li>Você abriu o link dentro de outro aplicativo, que não permite instalar.</li>
+      <li>Toque no menu <strong>⋯</strong> e escolha <strong>Abrir no navegador</strong> (Safari).</li>
+      <li>No Safari, toque em <strong>Compartilhar</strong> <span aria-hidden="true">⬆️</span> → <strong>Adicionar à Tela de Início</strong>.</li>`,
+  }[nav];
+  return html`<h2>Instalar no iPhone / iPad</h2>
+    <ol style="padding-left:1.2rem;line-height:1.8;margin:.5rem 0">${passos}
+      <li>Abra o app pelo ícone <strong>tri</strong> na tela inicial e ative os avisos em <strong>Notificações</strong>.</li></ol>
+    <div class="aviso info" style="margin-top:.75rem"><span class="icone">i</span><div class="small">
+      <strong>Não aparece "Adicionar à Tela de Início"?</strong> Feche a aba anônima/privada (se estiver usando), ou abra o link direto no Safari —
+      links abertos pelo WhatsApp ou e-mail podem abrir numa janela que não permite instalar (toque no ícone do Safari/bússola para abrir no navegador).
+      ${iosSemPush(versao) ? html`<br><br>Este aparelho está com iOS ${versao.texto}: o app pode ser instalado, mas as notificações exigem iOS 16.4 ou mais novo (Ajustes → Geral → Atualização de Software).` : ''}
+    </div></div>
+    <div class="rodape-modal"><button class="btn primario" data-fechar>Entendi</button></div>`;
 }
 
 // ---------- notificações push ----------

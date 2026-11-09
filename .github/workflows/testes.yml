@@ -1,0 +1,19 @@
+# Roda os testes em todo push e pull request (qualquer branch).
+name: Testes
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verificar sintaxe do frontend
+        run: for f in public/js/*.js public/js/views/*.js; do node --check "$f"; done
+      - name: Testes automatizados
+        run: npm test
