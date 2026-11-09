@@ -187,3 +187,51 @@ export function seletorHotel(valor, { todos = true, nome = 'hotel_id' } = {}) {
   return html`<select name="${nome}">${todos ? html`<option value="">Todas as unidades</option>` : ''}
     ${hoteis.map((h) => html`<option value="${h.id}" ${String(h.id) === String(valor ?? '') ? raw('selected') : ''}>${h.nome}</option>`)}</select>`;
 }
+
+// ---- Mostrar/ocultar senha ----
+// Todo campo de senha que aparecer na tela ganha um botão de olho (login, alterar/redefinir senha, cadastro).
+const OLHO = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const OLHO_RISCADO = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 19c-7 0-11-7-11-7a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 7 11 7a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+function adicionarOlho(input) {
+  if (input.dataset.olho) return;
+  input.dataset.olho = '1';
+  // O botão fica dentro do <label>; o nome acessível do campo continua sendo só o texto do rótulo.
+  const rotulo = input.closest('label')?.querySelector('span')?.textContent?.trim();
+  if (rotulo && !input.hasAttribute('aria-label')) input.setAttribute('aria-label', rotulo);
+  const caixa = document.createElement('span');
+  caixa.className = 'campo-senha';
+  input.replaceWith(caixa);
+  caixa.append(input);
+  const botao = document.createElement('button');
+  botao.type = 'button';
+  botao.className = 'ver-senha';
+  const atualizar = () => {
+    const visivel = input.type === 'text';
+    botao.innerHTML = visivel ? OLHO_RISCADO : OLHO;
+    botao.setAttribute('aria-label', visivel ? 'Ocultar senha' : 'Mostrar senha');
+    botao.setAttribute('aria-pressed', String(visivel));
+    botao.title = visivel ? 'Ocultar senha' : 'Mostrar senha';
+  };
+  botao.addEventListener('click', (e) => {
+    e.preventDefault();
+    const pos = input.selectionStart;
+    input.type = input.type === 'password' ? 'text' : 'password';
+    atualizar();
+    input.focus();
+    try { input.setSelectionRange(pos, pos); } catch { /* tipo sem seleção */ }
+  });
+  // Ao enviar o formulário a senha volta a ficar oculta (não fica exposta na tela seguinte).
+  input.form?.addEventListener('submit', () => { input.type = 'password'; atualizar(); });
+  atualizar();
+  caixa.append(botao);
+}
+
+const aplicarOlhos = (raiz) => raiz.querySelectorAll?.('input[type="password"]:not([data-olho])').forEach(adicionarOlho);
+aplicarOlhos(document);
+new MutationObserver((mudancas) => {
+  for (const m of mudancas) for (const n of m.addedNodes) if (n.nodeType === 1) {
+    if (n.matches?.('input[type="password"]')) adicionarOlho(n);
+    else aplicarOlhos(n);
+  }
+}).observe(document.documentElement, { childList: true, subtree: true });

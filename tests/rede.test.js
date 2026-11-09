@@ -85,3 +85,54 @@ test('inspeção vencida gera um aviso por hotel, não um por quarto', () => {
   assert.equal(avisos.length, 1);
   assert.match(avisos[0].mensagem, /^172 quartos/);
 });
+
+test('checklist é individual: excluir/desativar/incluir em um hotel não afeta os outros', async () => {
+  const inspecoes = await import('../src/domain/inspecoes.js');
+  const { db } = base();
+  const sel = (login) => um(db, 'SELECT id, nome, papel, hotel_id FROM usuarios WHERE login = ?', login);
+  const canela = sel('gerencia.canela');
+  const chapeco = sel('gerencia.chapeco');
+  const itensDe = (hotelId) => todos(db, 'SELECT item, ativo FROM checklist_modelo WHERE hotel_id = ? ORDER BY ordem', hotelId);
+  const antesChapeco = itensDe(chapeco.hotel_id);
+  const antesOsorio = itensDe(um(db, "SELECT id FROM hoteis WHERE logo = 'executive-osorio'").id);
+
+  // Gerente de Canela exclui, desativa e inclui itens no próprio hotel.
+  const tv = um(db, "SELECT id FROM checklist_modelo WHERE hotel_id = ? AND item = 'TV funcionando'", canela.hotel_id);
+  const cama = um(db, "SELECT id FROM checklist_modelo WHERE hotel_id = ? AND item = 'Cama'", canela.hotel_id);
+  inspecoes.excluirItemChecklist(db, canela, tv.id);
+  inspecoes.alternarItemChecklist(db, canela, cama.id);
+  inspecoes.adicionarItemChecklist(db, canela, { item: 'Lareira', ambiente: 'Básico para funcionamento e venda', categoria: 'outros', critico: true });
+  assert.equal(itensDe(canela.hotel_id).length, 31);
+  assert.ok(!itensDe(canela.hotel_id).some((i) => i.item === 'TV funcionando'));
+
+  // Os outros hotéis continuam exatamente iguais.
+  assert.deepEqual(itensDe(chapeco.hotel_id), antesChapeco);
+  assert.deepEqual(itensDe(um(db, "SELECT id FROM hoteis WHERE logo = 'executive-osorio'").id), antesOsorio);
+
+  // Gerente não mexe no checklist de outro hotel, nem incluindo com hotel_id alheio.
+  const itemChapeco = um(db, 'SELECT id FROM checklist_modelo WHERE hotel_id = ? LIMIT 1', chapeco.hotel_id);
+  assert.throws(() => inspecoes.excluirItemChecklist(db, canela, itemChapeco.id), (e) => e.status === 403);
+  assert.throws(() => inspecoes.alternarItemChecklist(db, canela, itemChapeco.id), (e) => e.status === 403);
+  assert.throws(() => inspecoes.adicionarItemChecklist(db, canela, { hotel_id: chapeco.hotel_id, item: 'X', ambiente: 'Y', categoria: 'outros' }), (e) => e.status === 403);
+  assert.deepEqual(itensDe(chapeco.hotel_id), antesChapeco);
+
+  // Nova inspeção em Canela usa a lista de Canela; em Chapecó, a de Chapecó.
+  const quartoCanela = um(db, 'SELECT id FROM quartos WHERE hotel_id = ? LIMIT 1', canela.hotel_id);
+  const quartoChapeco = um(db, 'SELECT id FROM quartos WHERE hotel_id = ? LIMIT 1', chapeco.hotel_id);
+  const nomes = (insId) => todos(db, 'SELECT item FROM inspecao_itens WHERE inspecao_id = ?', insId).map((i) => i.item);
+  const insCanela = nomes(inspecoes.criar(db, canela, { quarto_id: quartoCanela.id }));
+  const insChapeco = nomes(inspecoes.criar(db, chapeco, { quarto_id: quartoChapeco.id }));
+  assert.ok(insCanela.includes('Lareira') && !insCanela.includes('TV funcionando') && !insCanela.includes('Cama'));
+  assert.ok(insChapeco.includes('TV funcionando') && insChapeco.includes('Cama') && !insChapeco.includes('Lareira'));
+});
+
+test('checklist esvaziado não volta para o padrão do sistema', async () => {
+  const inspecoes = await import('../src/domain/inspecoes.js');
+  const { db } = base();
+  const g = um(db, "SELECT id, nome, papel, hotel_id FROM usuarios WHERE login = 'gerencia.xanxere'");
+  for (const it of todos(db, 'SELECT id FROM checklist_modelo WHERE hotel_id = ?', g.hotel_id)) inspecoes.excluirItemChecklist(db, g, it.id);
+  assert.deepEqual(inspecoes.checklistDoHotel(db, g.hotel_id, { incluirInativos: true }), { personalizado: true, itens: [] });
+  const quarto = um(db, 'SELECT id FROM quartos WHERE hotel_id = ? LIMIT 1', g.hotel_id);
+  assert.throws(() => inspecoes.criar(db, g, { quarto_id: quarto.id }), /checklist de inspeção deste hotel está vazio/);
+  assert.equal(um(db, 'SELECT COUNT(*) AS n FROM inspecoes WHERE quarto_id = ?', quarto.id).n, 0, 'nenhuma inspeção vazia criada');
+});

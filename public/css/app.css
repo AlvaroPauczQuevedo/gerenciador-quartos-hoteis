@@ -334,3 +334,16 @@ td .badge { margin: .1rem .15rem .1rem 0; }
   .respostas { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
   .respostas button { width: 100%; }
 }
+
+/* Campo de senha com botão de mostrar/ocultar */
+.campo-senha { position: relative; display: block; width: 100%; }
+.campo-senha input { padding-right: 2.75rem; }
+.ver-senha {
+  position: absolute; top: 50%; right: .3rem; transform: translateY(-50%);
+  display: grid; place-items: center; width: 2.25rem; height: 2.25rem; min-height: 0;
+  border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; padding: 0;
+}
+.ver-senha:hover, .ver-senha[aria-pressed="true"] { color: var(--text); background: var(--surface-2); }
+.ver-senha:focus-visible { outline: 2px solid var(--primary-2); outline-offset: 0; }
+/* Esconde o "olho" nativo do Edge para não aparecerem dois botões. */
+input[type="password"]::-ms-reveal, input[type="password"]::-ms-clear { display: none; }

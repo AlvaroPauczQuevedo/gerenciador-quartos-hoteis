@@ -1,6 +1,10 @@
 import { todos, um, exec } from '../db.js';
 import { agoraIso } from './comum.js';
 
+// Notificações criadas durante a operação atual, para envio por push DEPOIS do commit
+// (o servidor esvazia a fila ao concluir a requisição e a descarta se houver erro/rollback).
+export const filaPush = { ativa: false, itens: [] };
+
 export function notificar(db, usuarioIds, { tipo, mensagem, os_id = null, quarto_id = null, excluir = null, agora }) {
   const ids = [...new Set(usuarioIds.filter((id) => id != null && id !== excluir))];
   const quando = agoraIso(agora);
@@ -8,6 +12,7 @@ export function notificar(db, usuarioIds, { tipo, mensagem, os_id = null, quarto
     'INSERT INTO notificacoes (usuario_id, tipo, mensagem, os_id, quarto_id, criado_em) VALUES (?, ?, ?, ?, ?, ?)'
   );
   for (const id of ids) st.run(id, tipo, mensagem, os_id, quarto_id, quando);
+  if (filaPush.ativa && ids.length) filaPush.itens.push({ usuarios: ids, tipo, mensagem, os_id, quarto_id });
   return ids.length;
 }
 

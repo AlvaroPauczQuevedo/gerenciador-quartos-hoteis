@@ -1,11 +1,16 @@
 import { estado, api, qs, ehRede } from '../estado.js';
 import { html, render, numero, moeda, relativo, dataHora } from '../ui.js';
 import { tabelaOS, kpi } from './componentes.js';
+import { estadoPush } from '../pwa.js';
+
+const CHAVE_CONVITE = 'convite-push-dispensado';
+const conviteDispensado = () => { try { return localStorage.getItem(CHAVE_CONVITE) === '1'; } catch { return false; } };
 
 export async function mostrar(el) {
   const u = estado.usuario;
   const p = u.papel;
-  const [resumo, notifs] = await Promise.all([api('/api/resumo'), api('/api/notificacoes')]);
+  const [resumo, notifs, situacaoPush] = await Promise.all([api('/api/resumo'), api('/api/notificacoes'), estadoPush().catch(() => 'indisponivel')]);
+  const convidarPush = ['inativo', 'instalar-ios'].includes(situacaoPush) && !conviteDispensado();
 
   const blocos = [];
   const carregar = (titulo, filtros, opts = {}) => api(`/api/os${qs({ limite: 8, ...filtros })}`).then((lista) => ({ titulo, lista, ...opts }));
@@ -37,6 +42,9 @@ export async function mostrar(el) {
         ${ehRede() && p !== 'tecnico' ? html`<a class="btn" href="#/rede">Visão da rede</a>` : ''}
       </div>
     </div>
+    ${convidarPush ? html`<div class="aviso info" id="convite-push" style="margin-bottom:1rem"><span class="icone">📲</span>
+      <div style="flex:1">Receba os avisos da manutenção no celular, mesmo com o sistema fechado. <a href="#/notificacoes">Ativar notificações</a></div>
+      <button class="btn pequeno" id="dispensar-push" aria-label="Dispensar">Agora não</button></div>` : ''}
     <div class="kpis">
       ${kpi('Quartos liberados', `${r.liberados}/${r.quartos}`, { detalhe: 'disponíveis para comercialização', classe: 'bom', href: '#/quartos?status_comercial=liberado' })}
       ${kpi('Quartos bloqueados', r.bloqueados, { classe: r.bloqueados ? 'atencao' : '', href: '#/quartos?status_comercial=bloqueado' })}
@@ -65,4 +73,8 @@ export async function mostrar(el) {
           <div class="muted small" title="${dataHora(n.criado_em)}">${relativo(n.criado_em)}</div></li>`)}</ul>` : html`<p class="vazio">Sem notificações.</p>`}
       </section>
     </div>`);
+  el.querySelector('#dispensar-push')?.addEventListener('click', () => {
+    try { localStorage.setItem(CHAVE_CONVITE, '1'); } catch { /* sem armazenamento local */ }
+    el.querySelector('#convite-push')?.remove();
+  });
 }

@@ -1,5 +1,5 @@
 // Inspeções periódicas (seção 16) e problemas crônicos (seção 20, item 7).
-import { todos, um, exec } from '../db.js';
+import { todos, um, exec, lerConfig, gravarConfig } from '../db.js';
 import { CHECKLIST_PADRAO, RESPOSTAS_INSPECAO, CATEGORIAS, STATUS_FINAIS, EQUIPAMENTOS_PADRAO } from './constantes.js';
 import { agoraIso, somarDias, exigir, exigirHotel, exigirPapel, filtroHotel, texto, buscarQuarto } from './comum.js';
 import * as os from './os.js';
@@ -15,6 +15,8 @@ export function criar(db, usuario, { quarto_id }, agora) {
   exigirHotel(usuario, q.hotel_id);
   const aberta = um(db, "SELECT id FROM inspecoes WHERE quarto_id = ? AND status = 'em_andamento'", q.id);
   if (aberta) return aberta.id;
+  const modelo = checklistDoHotel(db, q.hotel_id);
+  exigir(modelo.itens.length, 'O checklist de inspeção deste hotel está vazio. Cadastre ou reative itens em Cadastros → Checklist de inspeção.');
 
   const r = exec(db, 'INSERT INTO inspecoes (hotel_id, quarto_id, inspetor_id, iniciada_em) VALUES (?, ?, ?, ?)',
     q.hotel_id, q.id, usuario.id, agoraIso(agora));
@@ -23,7 +25,6 @@ export function criar(db, usuario, { quarto_id }, agora) {
   const porTipo = (tipo) => equipamentos.find((e) => e.tipo === tipo)?.id ?? null;
   const st = db.prepare(`INSERT INTO inspecao_itens (inspecao_id, ordem, ambiente, item, categoria, local, equipamento_id, critico)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
-  const modelo = checklistDoHotel(db, q.hotel_id);
   let ordem = 0;
   for (const c of modelo.itens) st.run(id, ++ordem, c.ambiente, c.item, c.categoria, c.local, c.equipamento ? porTipo(c.equipamento) : null, c.critico ? 1 : 0);
   // Equipamentos cadastrados no quarto que o checklist não cobre.
@@ -222,13 +223,22 @@ export function listar(db, usuario, filtros = {}, agora) {
 
 // ---- Checklist configurável por hotel ----
 
+// Cada hotel tem a SUA lista de itens (linhas próprias em checklist_modelo, por hotel_id):
+// incluir, desativar ou excluir um item afeta apenas aquele hotel. Hotéis que nunca tiveram
+// checklist próprio usam o padrão do sistema; depois de personalizado, nunca volta ao padrão sozinho.
+const marcaPersonalizado = (hotelId) => `checklist_personalizado:${hotelId}`;
+const temChecklistProprio = (db, hotelId) =>
+  lerConfig(db, marcaPersonalizado(hotelId)) === '1' || !!um(db, 'SELECT 1 AS x FROM checklist_modelo WHERE hotel_id = ? LIMIT 1', hotelId);
+
 export function checklistDoHotel(db, hotelId, { incluirInativos = false } = {}) {
   const itens = todos(db, `SELECT * FROM checklist_modelo WHERE hotel_id = ? ${incluirInativos ? '' : 'AND ativo = 1'} ORDER BY ordem, id`, hotelId);
-  if (itens.length || incluirInativos) return { personalizado: itens.length > 0, itens };
+  if (temChecklistProprio(db, hotelId)) return { personalizado: true, itens };
+  if (incluirInativos) return { personalizado: false, itens: [] };
   return { personalizado: false, itens: CHECKLIST_PADRAO.map((c) => ({ ...c, critico: 0 })) };
 }
 
 export function definirChecklist(db, hotelId, itens) {
+  gravarConfig(db, marcaPersonalizado(hotelId), '1');
   exec(db, 'DELETE FROM checklist_modelo WHERE hotel_id = ?', hotelId);
   const st = db.prepare('INSERT INTO checklist_modelo (hotel_id, ordem, ambiente, item, categoria, local, equipamento, critico) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
   itens.forEach((c, i) => st.run(hotelId, i + 1, c.ambiente, c.item, c.categoria, c.local, c.equipamento || null, c.critico ? 1 : 0));
@@ -241,6 +251,8 @@ export function adicionarItemChecklist(db, usuario, dados) {
   exigir(texto(dados.item), 'Informe o item.');
   exigir(texto(dados.ambiente), 'Informe o grupo/ambiente.');
   exigir(CATEGORIAS[dados.categoria], 'Categoria inválida.');
+  exigir(um(db, 'SELECT id FROM hoteis WHERE id = ?', hotelId), 'Hotel não encontrado.', 404);
+  gravarConfig(db, marcaPersonalizado(hotelId), '1');
   const ordem = (todos(db, 'SELECT MAX(ordem) AS m FROM checklist_modelo WHERE hotel_id = ?', hotelId)[0].m || 0) + 1;
   const r = exec(db, 'INSERT INTO checklist_modelo (hotel_id, ordem, ambiente, item, categoria, local, equipamento, critico) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     hotelId, ordem, texto(dados.ambiente), texto(dados.item), dados.categoria, texto(dados.local) || 'quarto', texto(dados.equipamento) || null, dados.critico ? 1 : 0);
@@ -253,4 +265,15 @@ export function alternarItemChecklist(db, usuario, id) {
   exigir(it, 'Item não encontrado.', 404);
   exigirHotel(usuario, it.hotel_id);
   exec(db, 'UPDATE checklist_modelo SET ativo = 1 - ativo WHERE id = ?', it.id);
+}
+
+// Exclui o item do checklist DESTE hotel. Inspeções já feitas guardam a própria cópia dos itens
+// (inspecao_itens), então o histórico não é afetado; inspeções em andamento também não.
+export function excluirItemChecklist(db, usuario, id) {
+  exigirPapel(usuario, 'admin', 'gerente');
+  const it = um(db, 'SELECT * FROM checklist_modelo WHERE id = ?', Number(id));
+  exigir(it, 'Item não encontrado.', 404);
+  exigirHotel(usuario, it.hotel_id);
+  gravarConfig(db, marcaPersonalizado(it.hotel_id), '1');
+  exec(db, 'DELETE FROM checklist_modelo WHERE id = ?', it.id);
 }

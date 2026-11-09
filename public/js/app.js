@@ -1,5 +1,6 @@
 import { estado, api, post, ehRede, marcaDoUsuario } from './estado.js';
 import { html, render, $, toast, esc, modal, dadosForm } from './ui.js';
+import { iniciarPWA, podeInstalar, instalar, aoMudar, aoSair, revincular } from './pwa.js';
 
 const ROTAS = [
   [/^\/?$/, 'inicio'],
@@ -37,6 +38,7 @@ function menu() {
   return itens;
 }
 
+let pararOuvirPWA = null;
 function shell() {
   const u = estado.usuario;
   const marca = marcaDoUsuario();
@@ -50,6 +52,7 @@ function shell() {
         <a class="nav" href="#/notificacoes">Notificações <span class="contador" id="cont-notif"></span></a>
         <div class="rodape">
           <strong>${u.nome}</strong><br><span style="opacity:.75">${estado.meta.PAPEIS[u.papel]}${` · ${u.hotel_nome || (estado.hoteis.length === 1 ? estado.hoteis[0].nome : 'Rede')}`}</span>
+          <button class="btn claro pequeno" id="instalar-app" hidden>📲 Instalar app</button>
           <button class="btn claro pequeno" id="senha">Alterar senha</button>
           <button class="btn claro pequeno" id="sair">Sair</button>
         </div>
@@ -63,7 +66,13 @@ function shell() {
         <main class="conteudo" id="conteudo"></main>
       </div>
     </div>`);
-  $('#sair').addEventListener('click', async () => { await post('/api/logout'); location.hash = ''; iniciar(); });
+  $('#sair').addEventListener('click', async () => { await aoSair(); await post('/api/logout'); location.hash = ''; iniciar(); });
+  const botaoInstalar = $('#instalar-app');
+  const atualizarInstalar = () => { botaoInstalar.hidden = !podeInstalar(); };
+  botaoInstalar.addEventListener('click', instalar);
+  atualizarInstalar();
+  pararOuvirPWA?.();
+  pararOuvirPWA = aoMudar(atualizarInstalar);
   $('#senha').addEventListener('click', alterarSenha);
   $('#abrir-menu').addEventListener('click', (e) => { e.stopPropagation(); $('.shell').classList.toggle('menu-aberto'); });
   document.addEventListener('click', (e) => {
@@ -146,6 +155,7 @@ async function iniciar() {
     Object.assign(estado, eu);
     shell();
     navegar();
+    revincular();
   } catch {
     estado.usuario = null;
     const { mostrar } = await import('./views/login.js');
@@ -158,6 +168,9 @@ window.addEventListener('sessao-expirada', () => { if (estado.usuario) { estado.
 window.addEventListener('unhandledrejection', (e) => { if (e.reason?.message) toast(e.reason.message, 'erro'); });
 setInterval(pollNotificacoes, 30000);
 document.addEventListener('visibilitychange', pollNotificacoes);
+window.addEventListener('offline', () => toast('Sem conexão com a internet. As alterações não serão salvas até a conexão voltar.', 'erro'));
+window.addEventListener('online', () => toast('Conexão restabelecida.'));
+iniciarPWA();
 iniciar();
 
 export { esc };

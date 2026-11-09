@@ -8,10 +8,11 @@ const linhaFaixa = () => html`<div class="form-grade" data-faixa style="grid-tem
   <label class="campo"><span>Até o nº</span><input type="number" min="1" data-f="fim" placeholder="120"></label>
   <label class="campo"><span>Tipo</span><input data-f="tipo" placeholder="opcional"></label></div>`;
 
-export async function mostrar(el) {
-  const [hoteis, usuarios, checklist] = await Promise.all([api('/api/hoteis'), api('/api/usuarios'), api('/api/checklist')]);
+export async function mostrar(el, _p, query = {}) {
+  const [hoteis, usuarios, checklist] = await Promise.all([api('/api/hoteis'), api('/api/usuarios'), api(`/api/checklist${query.checklist_hotel ? `?hotel_id=${encodeURIComponent(query.checklist_hotel)}` : ''}`)]);
   const M = estado.meta;
   const admin = estado.usuario.papel === 'admin';
+  const hotelChecklist = hoteis.find((h) => h.id === checklist.hotel_id);
   // Perfis que o gerente pode atribuir (a regra vale também no servidor).
   const papeisPermitidos = admin ? M.PAPEIS : Object.fromEntries(Object.entries(M.PAPEIS).filter(([k]) => ['gerente', 'governanta', 'manutencao_chefe', 'tecnico', 'aprovador_financeiro'].includes(k)));
   const optsHoteis = Object.fromEntries(hoteis.map((h) => [h.id, h.nome]));
@@ -63,13 +64,18 @@ export async function mostrar(el) {
           <div><button class="btn primario">Cadastrar quarto</button></div></form>
       </section>
     </div>
-    <section class="card" style="margin-top:1rem"><h2>Checklist de inspeção</h2>
+    <section class="card" style="margin-top:1rem" id="checklist">
+      <div class="card-titulo"><h2>Checklist de inspeção — ${hotelChecklist?.nome || ''}</h2>
+        ${admin && hoteis.length > 1 ? html`<label class="filtros" style="margin:0"><span class="sr">Hotel do checklist</span><select id="checklist-hotel">${hoteis.map((h) => html`<option value="${h.id}" ${h.id === checklist.hotel_id ? raw('selected') : ''}>${h.nome}</option>`)}</select></label>` : ''}</div>
+      <div class="aviso info" style="margin-bottom:.75rem"><span class="icone">i</span><div>Esta lista é <strong>exclusiva do ${hotelChecklist?.nome || 'hotel'}</strong>. Incluir, desativar ou excluir itens aqui não altera o checklist dos outros hotéis. Inspeções já realizadas não são afetadas.</div></div>
       ${checklist.personalizado ? html`<p class="small muted">Itens marcados como <strong>básicos</strong> são necessários para o funcionamento e a venda do quarto: uma falha gera OS com prioridade alta e bloqueia o quarto. Os demais são tratados como crônicos (dependem de ocupação/budget). As alterações valem para as próximas inspeções.</p>
+        ${!checklist.itens.some((i) => i.ativo) ? html`<div class="aviso danger" style="margin-bottom:.75rem"><span class="icone">!</span><div>O checklist deste hotel está vazio: novas inspeções não podem ser iniciadas até que algum item seja cadastrado ou reativado.</div></div>` : ''}
         ${[...new Set(checklist.itens.map((i) => i.ambiente))].map((amb) => html`<h3 style="margin-top:1rem">${amb}</h3>
           <div class="tabela-wrap"><table><thead><tr><th>Item</th><th>Categoria</th><th>Equipamento</th><th>Tipo</th><th>Situação</th></tr></thead><tbody>
           ${checklist.itens.filter((i) => i.ambiente === amb).map((i) => html`<tr style="${i.ativo ? '' : 'opacity:.55'}"><td>${i.item}</td><td>${M.CATEGORIAS[i.categoria]}</td><td>${i.equipamento || '—'}</td>
             <td>${i.critico ? html`<span class="badge danger sem-ponto">Básico p/ venda</span>` : html`<span class="badge sem-ponto">Crônico</span>`}</td>
-            <td><button class="btn pequeno" data-item-checklist="${i.id}">${i.ativo ? 'Desativar' : 'Reativar'}</button></td></tr>`)}</tbody></table></div>`)}`
+            <td class="nowrap"><button class="btn pequeno" data-item-checklist="${i.id}">${i.ativo ? 'Desativar' : 'Reativar'}</button>
+              <button class="btn pequeno perigo" data-excluir-item="${i.id}" data-nome="${i.item}">Excluir</button></td></tr>`)}</tbody></table></div>`)}`
         : html`<p class="small muted">Este hotel usa o checklist padrão do sistema. Adicione itens abaixo para criar um checklist próprio.</p>`}
       <form class="form" id="f-checklist" style="margin-top:1rem"><h3>Novo item</h3><div class="form-grade">
         <input type="hidden" name="hotel_id" value="${checklist.hotel_id}">
@@ -105,6 +111,21 @@ export async function mostrar(el) {
   enviar('#f-quarto', '/api/quartos', 'Quarto cadastrado.');
   enviar('#f-checklist', '/api/checklist', 'Item adicionado ao checklist.');
   for (const b of $$('[data-item-checklist]', el)) b.addEventListener('click', async () => { await post(`/api/checklist/${b.dataset.itemChecklist}/alternar`); recarregar(); });
+  $('#checklist-hotel', el)?.addEventListener('change', (e) => { location.hash = `#/cadastros?checklist_hotel=${e.target.value}`; });
+  for (const b of $$('[data-excluir-item]', el)) {
+    b.addEventListener('click', () => {
+      const { el: m, fechar } = modal(html`<h2>Excluir item do checklist</h2>
+        <p><strong>${b.dataset.nome}</strong></p>
+        <p class="small">O item sai do checklist do <strong>${hotelChecklist?.nome || 'hotel'}</strong> apenas. Os outros hotéis e as inspeções já realizadas não são afetados. Se quiser só tirar temporariamente, use "Desativar".</p>
+        <div class="aviso danger" id="erro-item" hidden></div>
+        <div class="rodape-modal"><button class="btn" data-fechar>Cancelar</button><button class="btn perigo" id="confirmar-item">Excluir item</button></div>`.s);
+      $('#confirmar-item', m).addEventListener('click', async (e) => {
+        e.target.disabled = true;
+        try { await post(`/api/checklist/${b.dataset.excluirItem}/excluir`); fechar(); toast('Item excluído do checklist deste hotel.'); recarregar(); }
+        catch (err) { const x = $('#erro-item', m); x.textContent = err.message; x.hidden = false; e.target.disabled = false; }
+      });
+    });
+  }
   $('#add-faixa', el).addEventListener('click', () => $('#faixas', el).insertAdjacentHTML('beforeend', linhaFaixa().s));
   $('#f-numeracao', el).addEventListener('submit', async (e) => {
     e.preventDefault();

@@ -8,6 +8,10 @@ import { ErroHttp } from './domain/comum.js';
 import * as usuarios from './domain/usuarios.js';
 import * as fotos from './domain/fotos.js';
 import { verificar } from './domain/agendador.js';
+import { filaPush } from './domain/notificacoes.js';
+import * as push from './domain/push.js';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { popularPiloto, gravarCredenciais, HOTEL_PILOTO } from './seed.js';
 import { importarRede, gravarCredenciaisRede } from './rede.js';
 
@@ -35,6 +39,28 @@ if (!um(db, 'SELECT id FROM usuarios LIMIT 1')) {
 }
 
 const rotas = criarRotas();
+
+// ---- Push: notificações geradas numa operação são enviadas ao celular só depois do commit ----
+filaPush.ativa = true;
+function enviarPushPendentes() {
+  const pendentes = filaPush.itens.splice(0);
+  if (pendentes.length) push.despachar(db, pendentes).catch((e) => console.warn('Push:', e.message));
+}
+const descartarPushPendentes = () => { filaPush.itens.length = 0; };
+
+// ---- App instalável: versão = impressão digital dos arquivos do frontend ----
+// Muda a cada deploy que altere o frontend; o service worker usa isso para atualizar os celulares.
+function listarPublico(dir, base = '') {
+  return readdirSync(dir).flatMap((f) => {
+    const rel = `${base}/${f}`;
+    return statSync(join(dir, f)).isDirectory() ? listarPublico(join(dir, f), rel) : [rel];
+  });
+}
+const arquivosPublicos = listarPublico(publico);
+const VERSAO_APP = createHash('sha256').update(arquivosPublicos.map((f) => `${f}:${readFileSync(join(publico, f)).length}:${createHash('sha1').update(readFileSync(join(publico, f))).digest('hex')}`).join('|')).digest('hex').slice(0, 12);
+const CASCA_APP = ['/', ...arquivosPublicos.filter((f) => /^\/(css|js)\/|^\/img\/(app|rede)\/|^\/img\/favicon|^\/manifest/.test(f) && f !== '/sw.js')];
+const SW = readFileSync(join(publico, 'sw.js'), 'utf8').replace("const VERSAO = '__VERSAO__';", `const VERSAO = '${VERSAO_APP}';`).replace('const CASCA = __ARQUIVOS__;', `const CASCA = ${JSON.stringify(CASCA_APP)};`);
+if (SW.includes('__VERSAO__') || SW.includes('__ARQUIVOS__')) throw new Error('sw.js: marcadores de versão não substituídos.');
 const COOKIE = 'sid';
 const JANELA_LOGIN = 15 * 60e3;
 const tentativas = new Map(); // falhas de login por IP
@@ -63,7 +89,13 @@ function cookieSessao(req, valor, maxAge) {
 let ultimaVerificacao = 0;
 function rodarAgendador() {
   ultimaVerificacao = Date.now();
-  try { transacao(db, () => verificar(db)); } catch (e) { console.error('Agendador:', e); }
+  try {
+    transacao(db, () => verificar(db));
+    enviarPushPendentes();
+  } catch (e) {
+    descartarPushPendentes();
+    console.error('Agendador:', e);
+  }
 }
 
 async function tratar(req, res) {
@@ -73,7 +105,11 @@ async function tratar(req, res) {
   const caminho = url.pathname;
   const sid = cookies(req)[COOKIE];
 
-  if (caminho === '/healthz') return json(res, 200, { ok: true });
+  if (caminho === '/healthz') return json(res, 200, { ok: true, versao: VERSAO_APP });
+  if (caminho === '/sw.js') {
+    res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache' });
+    return res.end(SW);
+  }
 
   if (caminho === '/api/login' && req.method === 'POST') {
     const ip = ipCliente(req);
@@ -114,8 +150,19 @@ async function tratar(req, res) {
     const rota = rotas.encontrar(req.method, caminho);
     if (!rota) throw new ErroHttp(404, 'Rota não encontrada.');
     const body = ['POST', 'PUT'].includes(req.method) ? await lerCorpo(req) : {};
-    const args = { db, usuario, params: rota.params, query: Object.fromEntries(url.searchParams), body, ctx };
-    const resultado = rota.handler.mutacao ? transacao(db, () => rota.handler(args)) : rota.handler(args);
+    const proto = req.headers['x-forwarded-proto'] || (req.socket.encrypted ? 'https' : 'http');
+    const cliente = { userAgent: req.headers['user-agent'] || '', urlPublica: req.headers.host ? `${proto}://${req.headers.host}` : null };
+    const args = { db, usuario, params: rota.params, query: Object.fromEntries(url.searchParams), body, ctx, cliente };
+    descartarPushPendentes();
+    let resultado;
+    try {
+      resultado = rota.handler.mutacao ? transacao(db, () => rota.handler(args)) : rota.handler(args);
+    } catch (e) {
+      descartarPushPendentes();
+      throw e;
+    }
+    enviarPushPendentes();
+    if (resultado && typeof resultado.then === 'function') resultado = await resultado;
     return json(res, 200, resultado ?? { ok: true });
   }
 

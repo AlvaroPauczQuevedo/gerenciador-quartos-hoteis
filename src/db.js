@@ -30,6 +30,19 @@ CREATE TABLE IF NOT EXISTS usuarios (
   excluido_em TEXT
 );
 
+-- Aparelhos com notificações push ativadas (um registro por navegador/celular).
+CREATE TABLE IF NOT EXISTS push_inscricoes (
+  id INTEGER PRIMARY KEY,
+  usuario_id INTEGER NOT NULL REFERENCES usuarios(id),
+  endpoint TEXT NOT NULL UNIQUE,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  user_agent TEXT,
+  falhas INTEGER NOT NULL DEFAULT 0,
+  criado_em TEXT NOT NULL,
+  ultimo_envio_em TEXT
+);
+
 CREATE TABLE IF NOT EXISTS sessoes (
   token TEXT PRIMARY KEY,
   usuario_id INTEGER NOT NULL REFERENCES usuarios(id),

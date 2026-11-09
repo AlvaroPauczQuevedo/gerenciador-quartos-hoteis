@@ -2,6 +2,13 @@
 
 Plataforma integrada de gestão hoteleira, conservação predial e manutenção operacional para redes com várias unidades.
 
+## App instalável e notificações no celular
+
+- O sistema pode ser instalado na tela inicial (Android, iPhone e computador) pelo botão **📲 Instalar app** no menu. No iPhone, a instalação é feita pelo Safari → Compartilhar → "Adicionar à Tela de Início".
+- Cada pessoa ativa as notificações no próprio aparelho em **Notificações → Ativar notificações neste aparelho**. Cada perfil recebe só o que é dele (`REGRAS` em `src/domain/push.js`). Entre 22h e 7h só chegam emergências. Ao sair da conta, o aparelho deixa de receber.
+- Atualizações: a cada deploy, o app mostra "Nova versão do sistema disponível". Ao tocar em **Atualizar**, a versão nova é carregada.
+- Requisitos: HTTPS (já ativo na Hostinger). No iPhone, iOS 16.4 ou mais novo e o app instalado. O Brave vem com o push desligado; nele, o sistema mostra como ativar.
+
 ## Publicação (Hostinger)
 
 O passo a passo está em [DEPLOY-HOSTINGER.md](DEPLOY-HOSTINGER.md). Os comandos usados são:

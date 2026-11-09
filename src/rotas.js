@@ -8,6 +8,7 @@ import * as os from './domain/os.js';
 import * as fotos from './domain/fotos.js';
 import * as inspecoes from './domain/inspecoes.js';
 import * as notificacoes from './domain/notificacoes.js';
+import * as push from './domain/push.js';
 import { analise as analiseRecorrencia, ocorrenciasRelacionadas } from './domain/recorrencia.js';
 import { indicadores, rede, resumoInicial } from './domain/indicadores.js';
 
@@ -108,6 +109,7 @@ export function criarRotas() {
   });
   post('/api/checklist', ({ db, usuario, body }) => ({ id: inspecoes.adicionarItemChecklist(db, usuario, body) }));
   post('/api/checklist/:id/alternar', ({ db, usuario, params }) => { inspecoes.alternarItemChecklist(db, usuario, params.id); return { ok: true }; });
+  post('/api/checklist/:id/excluir', ({ db, usuario, params }) => { inspecoes.excluirItemChecklist(db, usuario, params.id); return { ok: true }; });
 
   // ---- problemas crônicos ----
   get('/api/cronicos', ({ db, usuario, query }) => {
@@ -124,6 +126,13 @@ export function criarRotas() {
   get('/api/recorrencia', ({ db, usuario, query }) => analiseRecorrencia(db, usuario, query));
   get('/api/indicadores', ({ db, usuario, query }) => indicadores(db, usuario, query));
   get('/api/rede', ({ db, usuario, query }) => rede(db, usuario, query));
+
+  // ---- notificações push no celular ----
+  get('/api/push/chave', ({ db }) => ({ publica: push.chavesVapid(db).publica }));
+  get('/api/push/aparelhos', ({ db, usuario }) => push.aparelhosDoUsuario(db, usuario.id));
+  post('/api/push/inscrever', ({ db, usuario, body, cliente }) => { push.inscrever(db, usuario, body, cliente); return { ok: true }; });
+  post('/api/push/cancelar', ({ db, usuario, body }) => { push.cancelar(db, usuario, body.endpoint); return { ok: true }; });
+  r.post('/api/push/teste', ({ db, usuario }) => push.testar(db, usuario));
 
   // ---- notificações ----
   get('/api/notificacoes', ({ db, usuario, query }) => ({

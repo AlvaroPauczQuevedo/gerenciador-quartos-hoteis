@@ -134,6 +134,7 @@ export function alternarAtivo(db, usuario, id) {
   buscarAlvo(db, usuario, id);
   exec(db, 'UPDATE usuarios SET ativo = 1 - ativo WHERE id = ?', Number(id));
   exec(db, 'DELETE FROM sessoes WHERE usuario_id = ?', Number(id));
+  exec(db, 'DELETE FROM push_inscricoes WHERE usuario_id = ?', Number(id)); // para de receber no celular
 }
 
 // Referências que mantêm a rastreabilidade (quem abriu, recebeu, executou, validou...).
@@ -154,6 +155,7 @@ export function excluirUsuario(db, usuario, id) {
     AND (responsavel_id = ? OR id IN (SELECT os_id FROM os_tarefas WHERE tecnico_id = ? AND concluida = 0))`, alvo.id, alvo.id).n;
   exigir(!abertas, `Este usuário é responsável por ${abertas} demanda(s) em aberto. Designe outro profissional antes de excluir.`);
   exec(db, 'DELETE FROM sessoes WHERE usuario_id = ?', alvo.id);
+  exec(db, 'DELETE FROM push_inscricoes WHERE usuario_id = ?', alvo.id);
   const temHistorico = REFERENCIAS.some(([tabela, colunas]) =>
     um(db, `SELECT 1 AS x FROM ${tabela} WHERE ${colunas.map((c) => `${c} = ?`).join(' OR ')} LIMIT 1`, ...colunas.map(() => alvo.id)));
   if (!temHistorico) {
