@@ -175,7 +175,7 @@ export function criarRotas() {
   post('/api/estoque/:id/movimentar', ({ db, usuario, params, body }) => { const r = estoque.movimentar(db, usuario, params.id, body); aud(db, usuario, 'estoque_movimento', { hotel_id: r.item.hotel_id, alvo: r.item.nome, detalhes: { tipo: body.tipo, quantidade: body.quantidade, saldo: r.item.quantidade } }); return r; });
 
   // ---- auditoria ----
-  get('/api/auditoria', ({ db, usuario, query }) => ({ acoes: auditoria.ACOES_AUDITORIA, itens: auditoria.listar(db, usuario, query) }));
+  get('/api/auditoria', ({ db, usuario, query }) => ({ acoes: query.grupo === 'acessos' ? auditoria.ACOES_ACESSO : auditoria.ACOES_AUDITORIA, itens: auditoria.listar(db, usuario, query) }));
 
   // ---- notificações push no celular ----
   get('/api/push/chave', ({ db }) => ({ publica: push.chavesVapid(db).publica }));

@@ -16,7 +16,7 @@ Se algum teste falhar, o `main` não muda e o erro aparece na aba **Actions** do
 
 - **Backup automático:** cópia completa do banco todo dia, guardando as últimas 30, em `DATA_DIR/backups`. O administrador baixa ou gera um backup na hora em **Backups**.
 - **Senha provisória:** quem recebe uma senha de outra pessoa (cadastro ou redefinição) precisa criar a própria senha no primeiro acesso. Até trocar, o servidor bloqueia o restante do sistema.
-- **Registro de ações:** quem criou ou excluiu usuários, redefiniu senhas, alterou quartos, checklist, bloqueios, preventiva, estoque e backups. O gerente vê o próprio hotel; administrador e diretoria veem a rede.
+- **Registro de ações:** quem criou ou excluiu usuários, redefiniu senhas, alterou quartos, checklist, bloqueios, preventiva, estoque e backups. O gerente vê o próprio hotel; administrador e diretoria veem a rede. Na aba **Acessos** ficam as entradas e saídas, as tentativas de senha errada e os bloqueios por excesso de tentativas, com data, hora, endereço de internet (IP) e aparelho; a senha nunca é gravada e esses registros são apagados após 180 dias.
 - **QR codes:** etiquetas para imprimir, por hotel e andar, em **Quartos → QR codes**. Ao escanear, o app abre direto no quarto.
 - **Manutenção preventiva:** planos recorrentes que geram as OS sozinhos. As datas são distribuídas ao longo do período, e uma nova OS só é gerada quando a anterior foi encerrada. Preventivas não contam como recorrência.
 - **Estoque:** materiais por hotel, com entrada (custo médio), inventário e saída pela OS ("Usar material do estoque", que lança o custo). Alerta quando o material chega ao mínimo.

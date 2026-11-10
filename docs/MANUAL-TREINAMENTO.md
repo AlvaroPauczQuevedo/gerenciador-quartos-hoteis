@@ -146,7 +146,7 @@ O gerente coordena a manutenção do hotel: recebe as solicitações e distribui
 3. **Quartos:** edite tipo e andar, bloqueie/libere para venda, cadastre e substitua equipamentos, imprima as **etiquetas QR** (botão **▦ QR codes** em Quartos).
 4. **Preventiva:** em **Preventiva**, cadastre planos (ex.: limpeza dos filtros do ar a cada 90 dias). Na data, o sistema gera a OS sozinho e avisa você para distribuir.
 5. **Estoque:** em **Estoque**, mantenha itens, quantidades mínimas e entradas; o alerta mostra o que está abaixo do mínimo. Os técnicos dão baixa ao usar o material na OS.
-6. **Acompanhar:** **Indicadores** (tempo de atendimento, OS abertas/atrasadas, custo do mês × orçamento), **Recorrência** e o **Registro de ações** do hotel.
+6. **Acompanhar:** **Indicadores** (tempo de atendimento, OS abertas/atrasadas, custo do mês × orçamento), **Recorrência** e o **Registro de ações** do hotel (aba **Acessos**: entradas, saídas e tentativas de senha errada das contas do hotel).
 7. **Exportar:** botão **⬇ Excel** em Demandas, Quartos e Indicadores.
 
 ### 5.4 Diretoria
@@ -164,7 +164,7 @@ O gerente coordena a manutenção do hotel: recebe as solicitações e distribui
 3. **Checklist:** pode editar o checklist de qualquer hotel (escolha o hotel no seletor).
 4. **Backups:** o sistema faz backup diário automático; em **Backups** é possível gerar um manualmente e baixar.
 5. **Orçamentos:** também pode autorizar os que passam da alçada do gerente.
-6. **Registro de ações:** auditoria completa da rede.
+6. **Registro de ações:** auditoria completa da rede. Na aba **Acessos** aparecem quem entrou e saiu, as tentativas de senha errada (com IP e aparelho) e os bloqueios; ficam guardados por 180 dias.
 
 ---
 

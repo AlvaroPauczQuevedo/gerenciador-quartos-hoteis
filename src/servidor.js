@@ -100,7 +100,7 @@ let ultimaVerificacao = 0;
 function rodarAgendador() {
   ultimaVerificacao = Date.now();
   try {
-    transacao(db, () => verificar(db));
+    transacao(db, () => { verificar(db); auditoria.limparAcessosAntigos(db); });
     enviarPushPendentes();
     backup.backupDiario(db, dataDir).then((nome) => { if (nome) console.log(`Backup diário gerado: ${nome}`); })
       .catch((e) => console.error('Backup diário falhou:', e.message));
@@ -138,23 +138,31 @@ async function tratar(req, res) {
     const t = tentativas.get(ip);
     if (t && t.n >= 10 && Date.now() - t.desde < JANELA_LOGIN) throw new ErroHttp(429, 'Muitas tentativas de login. Aguarde 15 minutos.');
     const corpo = await lerCorpo(req);
+    const aparelho = auditoria.resumirAparelho(req.headers['user-agent']);
     let token;
     try {
       token = usuarios.login(db, corpo.usuario, corpo.senha);
     } catch (e) {
       const atual = t && Date.now() - t.desde < JANELA_LOGIN ? t : { n: 0, desde: Date.now() };
       tentativas.set(ip, { ...atual, n: atual.n + 1 });
+      auditoria.registrarAcesso(db, 'login_falha', { login: corpo.usuario, ip, aparelho, motivo: e.status === 401 ? 'usuário ou senha inválidos' : e.message });
+      if (atual.n + 1 === 10) auditoria.registrarAcesso(db, 'login_bloqueado', { login: corpo.usuario, ip, aparelho, motivo: 'bloqueado por 15 minutos após 10 falhas' });
       if (tentativas.size > 10000) for (const [k, v] of tentativas) if (Date.now() - v.desde > JANELA_LOGIN) tentativas.delete(k);
       throw e;
     }
     tentativas.delete(ip);
+    auditoria.registrarAcesso(db, 'login_ok', { usuario: usuarios.porToken(db, token), ip, aparelho });
     return json(res, 200, { ok: true }, { 'Set-Cookie': cookieSessao(req, token, 43200) });
   }
   if (caminho === '/api/config' && req.method === 'GET') {
     return json(res, 200, { modo: lerConfig(db, 'modo', 'piloto') });
   }
   if (caminho === '/api/logout' && req.method === 'POST') {
-    if (sid) usuarios.logout(db, sid);
+    if (sid) {
+      const quem = usuarios.porToken(db, sid);
+      if (quem) auditoria.registrarAcesso(db, 'logout', { usuario: quem, ip: ipCliente(req), aparelho: auditoria.resumirAparelho(req.headers['user-agent']) });
+      usuarios.logout(db, sid);
+    }
     return json(res, 200, { ok: true }, { 'Set-Cookie': cookieSessao(req, '', 0) });
   }
 

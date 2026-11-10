@@ -218,3 +218,36 @@ test('sem chefe de manutenção: gerente aceita direto e distribui; contas antig
   assert.equal(os.buscar(db, b).responsavel_id, tec.id);
   db.close();
 });
+
+test('acessos: entradas, falhas e bloqueio ficam separados das ações; sem senha; gerente só vê o próprio hotel; limpeza após 180 dias', () => {
+  const { db, sel } = cenario();
+  const ger = sel('gerencia'); const outro = sel('gerencia.canela'); const admin = sel('admin');
+  auditoria.registrarAcesso(db, 'login_ok', { usuario: ger, ip: '200.1.1.1', aparelho: auditoria.resumirAparelho('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit Safari/604.1') });
+  auditoria.registrarAcesso(db, 'login_falha', { login: 'GERENCIA', ip: '200.1.1.2', motivo: 'usuário ou senha inválidos' });
+  auditoria.registrarAcesso(db, 'login_falha', { login: 'canela.x', ip: '200.1.1.3' });
+  auditoria.registrarAcesso(db, 'login_falha', { login: 'Minha Senha Secreta 123!', ip: '200.1.1.4' });
+  auditoria.registrarAcesso(db, 'login_falha', { login: 'ninguem', ip: '200.1.1.5' });
+  auditoria.registrar(db, ger, 'quarto_bloqueado', { hotel_id: ger.hotel_id, alvo: '401' });
+
+  assert.equal(auditoria.listar(db, admin, {}).length, 1, 'ações administrativas não misturam com acessos');
+  const todosAcessos = auditoria.listar(db, admin, { grupo: 'acessos' });
+  assert.equal(todosAcessos.length, 5);
+  assert.ok(!JSON.stringify(todosAcessos).includes('Secreta'), 'texto fora do formato de login nunca é gravado');
+  assert.equal(todosAcessos.find((a) => a.detalhes.includes('200.1.1.4')).alvo, '(formato inválido)');
+  const falhaGerente = todosAcessos.find((a) => a.detalhes.includes('200.1.1.2'));
+  assert.deepEqual([falhaGerente.usuario_id, falhaGerente.hotel_id, falhaGerente.alvo], [ger.id, ger.hotel_id, 'gerencia'], 'login digitado em maiúsculas é associado à conta');
+  assert.equal(todosAcessos.find((a) => a.detalhes.includes('200.1.1.5')).usuario_id, null, 'conta inexistente');
+  assert.match(todosAcessos.find((a) => a.acao === 'login_ok').detalhes, /Safari em iPhone\/iPad/);
+
+  const doGerente = auditoria.listar(db, ger, { grupo: 'acessos' });
+  assert.deepEqual(doGerente.map((a) => a.detalhes.match(/200\.1\.1\.\d/)[0]).sort(), ['200.1.1.1', '200.1.1.2'], 'só os acessos de contas do próprio hotel');
+  assert.equal(auditoria.listar(db, outro, { grupo: 'acessos' }).length, 0);
+  assert.throws(() => auditoria.listar(db, sel('tecnico'), { grupo: 'acessos' }), (e) => e.status === 403);
+
+  const velho = '2026-01-01T00:00:00.000Z';
+  exec(db, "UPDATE auditoria SET criado_em = ? WHERE acao = 'login_falha'", velho);
+  exec(db, "UPDATE auditoria SET criado_em = ? WHERE acao = 'quarto_bloqueado'", velho);
+  assert.equal(auditoria.limparAcessosAntigos(db, '2026-11-10T00:00:00.000Z'), 4);
+  assert.equal(auditoria.listar(db, admin, { grupo: 'acessos' }).length, 1, 'entrada recente fica');
+  assert.equal(auditoria.listar(db, admin, {}).length, 1, 'ações administrativas nunca são apagadas');
+});
