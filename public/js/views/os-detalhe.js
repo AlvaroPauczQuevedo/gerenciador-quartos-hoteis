@@ -190,7 +190,7 @@ export async function mostrar(el, [id]) {
           <h2>Custos <span class="muted">${moeda(custoTotal)}</span></h2>
           ${os.custos.length ? html`<ul class="lista-simples">${os.custos.map((c) => html`<li style="display:flex;justify-content:space-between;gap:.5rem"><span>${c.descricao}<br><span class="muted small">${m.TIPOS_CUSTO[c.tipo]} · ${c.registrado_por_nome} · ${data(c.criado_em)}</span></span><strong class="nowrap">${moeda(c.valor)}</strong></li>`)}</ul>` : html`<p class="muted small">Nenhum custo registrado.</p>`}
         </section>
-        ${os.aprovacoes.length ? html`<section class="card"><h2>Aprovação financeira</h2><ul class="lista-simples">${os.aprovacoes.map((a) => html`<li>
+        ${os.aprovacoes.length ? html`<section class="card"><h2>Aprovação do orçamento</h2><ul class="lista-simples">${os.aprovacoes.map((a) => html`<li>
           <strong>${moeda(a.valor)}</strong> ${a.status === 'pendente' ? html`<span class="badge warn">Pendente</span>` : a.status === 'aprovado' ? html`<span class="badge ok">Aprovado</span>` : html`<span class="badge danger">Recusado</span>`}
           ${a.posterior ? html`<span class="badge sem-ponto">regularização posterior</span>` : ''}
           <div class="small">${a.descricao}${a.fornecedor ? html` — ${a.fornecedor}` : ''}</div>

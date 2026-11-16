@@ -120,7 +120,7 @@ export function popular(db, ctx, agoraRef = new Date().toISOString()) {
         t = somarHoras(t, 2);
         acao(slug, 'gerente', id, 'enviar_aprovacao', { valor: o.orcamento, descricao: 'Orçamento de peças e serviço', fornecedor: 'Fornecedor Regional Ltda.' }, t);
         t = somarHoras(t, 6 + r() * 20);
-        os.executarAcao(db, U(3), id, 'autorizar', { texto: 'Aprovado conforme orçamento.' }, t);
+        os.executarAcao(db, U(2), id, 'autorizar', { texto: 'Aprovado conforme orçamento.' }, t);
       }
       t = somarHoras(t, o.hIniciar ?? 2 + r() * 10);
       acao(slug, tec, id, 'iniciar', {}, t);

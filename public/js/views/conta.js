@@ -1,6 +1,6 @@
 import { estado, api, post } from '../estado.js';
 import { recarregar } from '../app.js';
-import { html, render, $, $$, toast, dataHora, modal } from '../ui.js';
+import { html, render, raw, $, $$, toast, dataHora, modal } from '../ui.js';
 import { qrSVG } from '../qr.js';
 
 export async function mostrar(el) {
@@ -51,7 +51,7 @@ export async function mostrar(el) {
         const r = await post('/api/eu/2fa/iniciar', { senha: e.target.senha.value });
         m.innerHTML = html`<h2>Ativar verificação em duas etapas</h2>
           <p class="small">Passo 2 de 2: no aplicativo autenticador, escolha <strong>adicionar conta</strong> e leia o QR code abaixo. Depois digite o código de 6 dígitos que aparecer.</p>
-          <div style="display:flex;justify-content:center;background:#fff;padding:.5rem;border-radius:8px;max-width:220px;margin:0 auto">${qrSVG(r.uri)}</div>
+          <div style="display:flex;justify-content:center;background:#fff;padding:.5rem;border-radius:8px;max-width:220px;margin:0 auto">${raw(qrSVG(r.uri))}</div>
           <p class="small muted" style="text-align:center;word-break:break-all">Sem câmera? Digite esta chave no aplicativo: <strong>${r.segredo}</strong></p>
           <form class="form" id="f-passo2"><label class="campo"><span class="obrig">Código do aplicativo</span><input name="codigo" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required></label>
             <div class="aviso danger" id="erro-2fa" hidden></div>

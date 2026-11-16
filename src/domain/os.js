@@ -267,7 +267,7 @@ export const ACOES = {
     },
   },
   enviar_aprovacao: {
-    rotulo: 'Encaminhar orçamento para aprovação financeira',
+    rotulo: 'Encaminhar orçamento para aprovação',
     pode: (db, u, os) => ['em_avaliacao', 'aguardando_orcamento', 'aprovada', 'em_execucao', 'aguardando_materiais'].includes(os.status) && ehManutencao(u, os) &&
       !um(db, "SELECT 1 AS x FROM aprovacoes WHERE os_id = ? AND status = 'pendente'", os.id),
     exec(db, u, os, d, agora) {

@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, existsSync, writeFileSync, readdirSync } from '
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { abrirBanco, um, todos, exec } from '../src/db.js';
-import { popularPiloto } from '../src/seed.js';
+import { popularPiloto, popular } from '../src/seed.js';
 import { importarRede } from '../src/rede.js';
 import { somarDias, somarHoras } from '../src/domain/comum.js';
 import * as usuarios from '../src/domain/usuarios.js';
@@ -479,4 +479,13 @@ test('duas etapas: configurar exige a senha, login pede o código, código não 
   assert.ok(usuarios.login(db, 'gerencia', senha('gerencia')), 'depois do reset entra só com a senha');
   seguranca.desativar2FA(db, admin, { senha: 'SenhaNova2026!', codigo: codigos[2] }, agora);
   assert.equal(seguranca.estado2FA(db, admin).ativo, false);
+});
+
+test('dados de demonstração (seed:demo) carregam com os perfis atuais e deixam OS em todas as situações', () => {
+  const db = abrirBanco(':memory:');
+  popular(db, { uploadsDir: join(mkdtempSync(join(tmpdir(), 'demo-')), 'uploads') });
+  const papeis = todos(db, 'SELECT DISTINCT papel FROM usuarios').map((r) => r.papel).sort();
+  assert.deepEqual(papeis, ['admin', 'diretoria', 'gerente', 'governanta', 'tecnico']);
+  const situacoes = new Set(todos(db, 'SELECT DISTINCT status FROM ordens_servico').map((r) => r.status));
+  for (const s of ['nova', 'aprovada', 'em_execucao', 'aguardando_autorizacao', 'concluida', 'encerrada']) assert.ok(situacoes.has(s), s);
 });

@@ -80,3 +80,4 @@ Os dados não são afetados, porque ficam em `manutencao-dados`. As variáveis d
 - **Tempo por requisição:** cada requisição pode levar no máximo 120 segundos. Uma foto de até 15 MB fica bem abaixo disso.
 - **Processos em segundo plano:** não são garantidos no plano. Por isso o verificador de prazos e de inspeções vencidas roda também a cada acesso ao sistema, além do relógio interno.
 - **Se o app não conseguir gravar em `DATA_DIR`:** acontece se a hospedagem restringir pastas fora do app, e o log mostra erro ao abrir o banco. Nesse caso, fale com o suporte da Hostinger ou use um **VPS**, onde não há essa limitação.
+ 
