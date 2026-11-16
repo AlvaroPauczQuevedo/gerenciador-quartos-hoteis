@@ -189,6 +189,47 @@ CREATE TABLE IF NOT EXISTS aprovacoes (
   decidido_em TEXT
 );
 
+-- Chaves de ações enviadas pelo modo offline: um reenvio com a mesma chave não repete a ação.
+CREATE TABLE IF NOT EXISTS idempotencia (
+  chave TEXT NOT NULL,
+  usuario_id INTEGER NOT NULL,
+  criado_em TEXT NOT NULL,
+  PRIMARY KEY (chave, usuario_id)
+);
+
+CREATE TABLE IF NOT EXISTS obrigacoes (
+  id INTEGER PRIMARY KEY,
+  hotel_id INTEGER NOT NULL REFERENCES hoteis(id),
+  tipo TEXT NOT NULL,
+  nome TEXT NOT NULL,
+  periodicidade_dias INTEGER NOT NULL,
+  ultima_em TEXT,
+  proxima_em TEXT,
+  fornecedor TEXT,
+  observacoes TEXT,
+  ativo INTEGER NOT NULL DEFAULT 1,
+  alerta_30_em TEXT,
+  alerta_7_em TEXT,
+  alerta_vencida_em TEXT,
+  criado_em TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_obrigacoes ON obrigacoes(hotel_id, proxima_em);
+CREATE TABLE IF NOT EXISTS obrigacoes_registros (
+  id INTEGER PRIMARY KEY,
+  obrigacao_id INTEGER NOT NULL REFERENCES obrigacoes(id),
+  hotel_id INTEGER NOT NULL REFERENCES hoteis(id),
+  realizado_em TEXT NOT NULL,
+  validade_ate TEXT,
+  fornecedor TEXT,
+  custo REAL,
+  observacao TEXT,
+  arquivo TEXT,
+  mime TEXT,
+  usuario_id INTEGER REFERENCES usuarios(id),
+  criado_em TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_obrigacoes_reg ON obrigacoes_registros(obrigacao_id, realizado_em);
+
 CREATE TABLE IF NOT EXISTS fotos (
   id INTEGER PRIMARY KEY,
   hotel_id INTEGER NOT NULL REFERENCES hoteis(id),
@@ -408,6 +449,18 @@ function migrar(db) {
   if (!colOs.includes('plano_preventiva_id')) db.exec('ALTER TABLE ordens_servico ADD COLUMN plano_preventiva_id INTEGER');
   removerAprovadorFinanceiro(db);
   removerChefeManutencao(db);
+  const colUsu3 = db.prepare('PRAGMA table_info(usuarios)').all().map((c) => c.name);
+  for (const [coluna, tipo] of [['totp_segredo', 'TEXT'], ['totp_ativo', 'INTEGER NOT NULL DEFAULT 0'], ['totp_ultimo_passo', 'INTEGER NOT NULL DEFAULT 0'], ['totp_recuperacao', 'TEXT']]) {
+    if (!colUsu3.includes(coluna)) db.exec(`ALTER TABLE usuarios ADD COLUMN ${coluna} ${tipo}`);
+  }
+  const colSessoes = db.prepare('PRAGMA table_info(sessoes)').all().map((c) => c.name);
+  for (const [coluna, tipo] of [['criado_em', 'TEXT'], ['ip', 'TEXT'], ['aparelho', 'TEXT']]) {
+    if (!colSessoes.includes(coluna)) db.exec(`ALTER TABLE sessoes ADD COLUMN ${coluna} ${tipo}`);
+  }
+  if (!colHoteis.includes('relato_publico')) db.exec('ALTER TABLE hoteis ADD COLUMN relato_publico INTEGER NOT NULL DEFAULT 0');
+  for (const [coluna, tipo] of [['avaliacao_nota', 'INTEGER'], ['avaliacao_comentario', 'TEXT'], ['alerta_escalonamento_em', 'TEXT']]) {
+    if (!colOs.includes(coluna)) db.exec(`ALTER TABLE ordens_servico ADD COLUMN ${coluna} ${tipo}`);
+  }
 }
 
 // O perfil "Responsável pela manutenção" deixou de existir: o gerente distribui direto para os técnicos.

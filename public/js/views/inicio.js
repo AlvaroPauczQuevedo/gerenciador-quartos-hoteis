@@ -31,6 +31,7 @@ export async function mostrar(el) {
   if (p === 'diretoria' || p === 'admin') blocos.push(carregar('Orçamentos aguardando autorização', { grupo: 'autorizacao' }, { link: '#/os?grupo=autorizacao' }));
   if (p === 'diretoria') blocos.push(carregar('Emergenciais em aberto na rede', { prioridade: 'emergencial', grupo: 'todas_abertas' }));
   const listas = await Promise.all(blocos);
+  const obrig = ['gerente', 'admin', 'diretoria'].includes(p) ? await api('/api/obrigacoes/resumo').catch(() => null) : null;
   const recorrencia = p !== 'tecnico' && p !== 'governanta' ? await api('/api/recorrencia') : null;
 
   const r = resumo;
@@ -43,6 +44,10 @@ export async function mostrar(el) {
         ${ehRede() && p !== 'tecnico' ? html`<a class="btn" href="#/rede">Visão da rede</a>` : ''}
       </div>
     </div>
+    ${['admin', 'diretoria'].includes(p) && !u.totp_ativo ? html`<div class="aviso warn" style="margin-bottom:1rem"><span class="icone">🔒</span>
+      <div style="flex:1"><strong>Proteja sua conta:</strong> ela enxerga toda a rede. Ative a verificação em duas etapas. <a href="#/conta">Ativar agora</a></div></div>` : ''}
+    ${obrig && (obrig.vencidas || obrig.vencendo || obrig.sem_registro) ? html`<div class="aviso ${obrig.vencidas ? 'danger' : 'warn'}" style="margin-bottom:1rem"><span class="icone">!</span>
+      <div style="flex:1"><strong>Obrigações legais:</strong> ${obrig.vencidas} vencida(s), ${obrig.vencendo} vencendo em 30 dias${obrig.sem_registro ? `, ${obrig.sem_registro} sem data registrada` : ''}. <a href="#/obrigacoes">Ver obrigações</a></div></div>` : ''}
     ${convidarInstalar ? html`<div class="aviso info" id="convite-instalar" style="margin-bottom:1rem"><span class="icone">📲</span>
       <div style="flex:1"><strong>Instale o app no celular</strong> para abrir com um toque e receber os avisos da manutenção.</div>
       <button class="btn pequeno primario" id="instalar-inicio">Como instalar</button></div>` : ''}

@@ -21,6 +21,7 @@ export async function mostrar(el, aoEntrar) {
     <form class="form" id="f-login">
       <label class="campo"><span>Usuário</span><input name="usuario" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required></label>
       <label class="campo"><span>Senha</span><input name="senha" type="password" autocomplete="current-password" required></label>
+      <label class="campo" id="campo-codigo" hidden><span>Código de verificação</span><input name="codigo" inputmode="numeric" autocomplete="one-time-code" maxlength="11" placeholder="6 dígitos do aplicativo"><small>Perdeu o celular? Use um código de recuperação.</small></label>
       <p class="aviso danger" id="erro" hidden></p>
       <button class="btn primario" type="submit">Entrar</button>
     </form>
@@ -35,7 +36,12 @@ export async function mostrar(el, aoEntrar) {
     const erro = $('#erro');
     erro.hidden = true;
     try {
-      await post('/api/login', { usuario: form.usuario.value, senha: form.senha.value });
+      const r = await post('/api/login', { usuario: form.usuario.value, senha: form.senha.value, codigo: form.codigo.value });
+      if (r.segundo_fator) {
+        $('#campo-codigo').hidden = false; form.codigo.required = true; form.codigo.focus();
+        erro.textContent = 'Digite o código de verificação do seu aplicativo autenticador.'; erro.hidden = false;
+        return;
+      }
       aoEntrar();
     } catch (err) {
       erro.textContent = err.message;

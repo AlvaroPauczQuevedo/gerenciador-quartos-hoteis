@@ -1,5 +1,6 @@
 import { estado, api, post } from '../estado.js';
 import { recarregar } from '../app.js';
+import { listarFila } from '../offline.js';
 import {
   html, render, raw, $, $$, modal, toast, opcoes, campoUpload, dadosForm, galeria, paraInputData,
   badgePrioridade, badgeStatus, badgeAtraso, dataHora, data, moeda, relativo,
@@ -48,6 +49,8 @@ const FORMS = {
   concluir: (os) => html`${campoTexto('Relatório de conclusão (o que foi feito)')}
     <p class="small muted">${os.fotos.some((f) => f.fase === 'depois') ? 'Já existem fotos de conclusão; você pode anexar mais.' : 'Anexe ao menos uma fotografia do serviço concluído como evidência.'}</p>`,
   validar: (os) => html`${campoTexto('Observações da inspeção final', false)}
+    <div class="form-grade"><label class="campo"><span>Como foi o serviço? (opcional)</span><select name="nota"><option value="">Sem avaliação</option><option value="5">5 — Excelente</option><option value="4">4 — Bom</option><option value="3">3 — Regular</option><option value="2">2 — Ruim</option><option value="1">1 — Péssimo</option></select></label>
+    <label class="campo"><span>Comentário sobre o serviço</span><input name="comentario_avaliacao" maxlength="500" placeholder="Opcional"></label></div>
     ${os.bloqueio_ativo ? html`<label class="check"><input type="checkbox" name="liberar_quarto" checked> Liberar o quarto ${os.quarto_numero} para comercialização</label>` : ''}`,
   solicitar_correcao: () => campoTexto('O que precisa ser corrigido?'),
   reabrir: (os) => html`${campoTexto('Motivo da reabertura')}${os.quarto_id ? html`<label class="check"><input type="checkbox" name="bloquear_quarto"> Bloquear o quarto novamente</label>` : ''}`,
@@ -77,9 +80,9 @@ function abrirAcao(os, acao) {
     const b = e.target.querySelector('[type=submit]');
     b.disabled = true;
     try {
-      await post(`/api/os/${os.id}/acoes/${acao.chave}`, d);
+      const r = await post(`/api/os/${os.id}/acoes/${acao.chave}`, d);
       fechar();
-      toast(`${acao.rotulo}: registrado.`);
+      toast(r?.enfileirado ? `${acao.rotulo}: guardado no aparelho. Será enviado quando a internet voltar.` : `${acao.rotulo}: registrado.`);
       recarregar();
     } catch (err) {
       const erro = $('#erro-acao', el);
@@ -94,6 +97,7 @@ const ROTULO_EVENTO = { abertura: 'Abertura', status: 'Situação', comentario: 
 
 export async function mostrar(el, [id]) {
   const os = await api(`/api/os/${id}`);
+  const aguardando = (await listarFila()).filter((i) => i.os_id === Number(id));
   const m = M();
   const acoesVisiveis = os.acoes.filter((a) => !a.interna);
   const principais = acoesVisiveis.filter((a) => DESTAQUE[a.chave]);
@@ -104,6 +108,8 @@ export async function mostrar(el, [id]) {
   const podeComentar = os.acoes.some((a) => a.chave === 'comentar');
 
   render(el, html`
+    ${os._cache_em ? html`<div class="aviso warn" style="margin-bottom:1rem"><span class="icone">!</span><div>Sem conexão: esta é a cópia salva às ${new Date(os._cache_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}. Suas ações ficam guardadas e são enviadas quando a internet voltar.</div></div>` : ''}
+    ${aguardando.length ? html`<div class="aviso info" style="margin-bottom:1rem"><span class="icone">⏳</span><div><strong>${aguardando.length} ação(ões) aguardando envio:</strong> ${aguardando.map((i) => i.rotulo).join(', ')}. <a href="#/pendencias">Ver envios pendentes</a></div></div>` : ''}
     <div class="cabecalho">
       <div>
         <p class="sub"><a href="#/os">← Demandas</a> · <a href="#/os/${os.id}/imprimir">🖨️ Imprimir / PDF</a></p>
@@ -151,6 +157,7 @@ export async function mostrar(el, [id]) {
             ${pessoa('Responsável', os.responsavel_nome, os.iniciado_em)}
             ${pessoa('Executou', os.executado_por_nome, os.concluido_em)}
             ${pessoa('Validou', os.validado_por_nome, os.validado_em)}
+            ${os.avaliacao_nota ? html`<div><span class="muted small">Avaliação do serviço</span><br><strong>${'★'.repeat(os.avaliacao_nota)}${'☆'.repeat(5 - os.avaliacao_nota)}</strong> ${os.avaliacao_comentario ? html`<span class="small">— ${os.avaliacao_comentario}</span>` : ''}</div>` : ''}
           </div>
           ${os.tarefas.length ? html`<h3 style="margin-top:1rem">Atividades distribuídas</h3><ul class="lista-simples">${os.tarefas.map((t) => html`<li style="display:flex;justify-content:space-between;gap:.5rem;align-items:center">
             <span>${t.concluida ? '✅' : '⬜'} ${t.descricao} <span class="muted small">— ${t.tecnico_nome}${t.concluida_em ? html`, concluída ${dataHora(t.concluida_em)}` : ''}</span></span>
@@ -207,15 +214,15 @@ export async function mostrar(el, [id]) {
   for (const b of $$('[data-acao]', el)) b.addEventListener('click', () => abrirAcao(os, os.acoes.find((a) => a.chave === b.dataset.acao)));
   for (const b of $$('[data-tarefa]', el)) {
     b.addEventListener('click', async () => {
-      await post(`/api/os/${os.id}/acoes/concluir_tarefa`, { tarefa_id: b.dataset.tarefa });
-      toast('Atividade concluída.');
+      const r = await post(`/api/os/${os.id}/acoes/concluir_tarefa`, { tarefa_id: b.dataset.tarefa });
+      toast(r?.enfileirado ? 'Atividade guardada no aparelho. Será enviada quando a internet voltar.' : 'Atividade concluída.');
       recarregar();
     });
   }
   $('#f-comentario', el)?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    await post(`/api/os/${os.id}/acoes/comentar`, { texto: e.target.texto.value });
-    toast('Comentário enviado.');
+    const r = await post(`/api/os/${os.id}/acoes/comentar`, { texto: e.target.texto.value });
+    toast(r?.enfileirado ? 'Comentário guardado no aparelho. Será enviado quando a internet voltar.' : 'Comentário enviado.');
     recarregar();
   });
   $('#add-foto', el).addEventListener('click', () => {
@@ -229,9 +236,10 @@ export async function mostrar(el, [id]) {
       e.preventDefault();
       const lista = obter();
       if (!lista.length) { toast('Selecione ao menos um arquivo.', 'erro'); return; }
-      for (const f of lista) await post('/api/fotos', { ...f, os_id: os.id, fase: e.target.fase.value, legenda: e.target.legenda.value });
+      let guardadas = false;
+      for (const f of lista) { const r = await post('/api/fotos', { ...f, os_id: os.id, fase: e.target.fase.value, legenda: e.target.legenda.value }); if (r?.enfileirado) guardadas = true; }
       fechar();
-      toast('Imagens anexadas.');
+      toast(guardadas ? 'Imagens guardadas no aparelho. Serão enviadas quando a internet voltar.' : 'Imagens anexadas.');
       recarregar();
     });
   });

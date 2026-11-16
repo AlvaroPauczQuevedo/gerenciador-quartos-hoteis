@@ -26,6 +26,13 @@ export const ACOES_AUDITORIA = {
   preventiva_excluida: 'Plano de preventiva excluído',
   estoque_item: 'Item de estoque cadastrado/alterado',
   estoque_movimento: 'Movimentação de estoque',
+  doisfatores_ativado: 'Verificação em duas etapas ativada',
+  doisfatores_desativado: 'Verificação em duas etapas desativada',
+  doisfatores_resetado: 'Verificação em duas etapas redefinida por outro usuário',
+  obrigacao_criada: 'Obrigação legal cadastrada',
+  obrigacao_alterada: 'Obrigação legal alterada',
+  obrigacao_registrada: 'Realização de obrigação registrada',
+  obrigacao_excluida: 'Obrigação legal excluída',
   backup_baixado: 'Backup baixado',
   backup_gerado: 'Backup gerado manualmente',
 };

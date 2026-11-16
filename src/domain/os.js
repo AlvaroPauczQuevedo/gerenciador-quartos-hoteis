@@ -20,7 +20,7 @@ const FINAIS_SQL = STATUS_FINAIS.map((s) => `'${s}'`).join(',');
 
 // ---------- utilitários ----------
 
-const ORIGENS = ['manual', 'inspecao', 'preventiva', 'hospede'];
+const ORIGENS = ['manual', 'inspecao', 'preventiva', 'hospede', 'qr'];
 
 export function gerarProtocolo(db, agora) {
   const ano = new Date(agoraIso(agora)).getUTCFullYear();
@@ -122,6 +122,9 @@ export function criar(db, usuario, dados, agora) {
   exigir(CATEGORIAS[categoria], 'Informe uma categoria válida.');
   exigir(PRIORIDADES[prioridade], 'Informe o grau de prioridade.');
   exigir(descricao.length >= 10, 'Descreva o problema com mais detalhes (mínimo de 10 caracteres).');
+  // O gerente (ou a administração) pode já designar o técnico na abertura: a solicitação nasce aceita.
+  const tecnicoNaAbertura = dados.responsavel_id ? validarTecnico(db, { hotel_id: hotelId }, dados.responsavel_id) : null;
+  if (tecnicoNaAbertura) exigir(ehManutencao(usuario, { hotel_id: hotelId }), 'Somente o gerente do hotel pode designar o técnico ao abrir a solicitação.', 403);
   if (dados.impacto) exigir(IMPACTOS[dados.impacto], 'Impacto inválido.');
   const bloqueio = !!dados.bloqueio_quarto;
   exigir(!bloqueio || quartoId, 'O bloqueio só pode ser solicitado quando há um quarto informado.');
@@ -147,7 +150,7 @@ export function criar(db, usuario, dados, agora) {
   const os = buscar(db, Number(r.lastInsertRowid));
   evento(db, os, usuario, 'abertura', {
     para: 'nova', agora,
-    texto: `Solicitação aberta com prioridade ${PRIORIDADES[prioridade]}.${{ inspecao: ' Origem: inspeção periódica.', preventiva: ' Origem: manutenção preventiva programada.', hospede: ' Origem: avaliação/reclamação de hóspede.' }[os.origem] || ''}`,
+    texto: `Solicitação aberta com prioridade ${PRIORIDADES[prioridade]}.${{ inspecao: ' Origem: inspeção periódica.', preventiva: ' Origem: manutenção preventiva programada.', hospede: ' Origem: avaliação/reclamação de hóspede.', qr: ' Origem: relato pelo QR code do quarto (sem login).' }[os.origem] || ''}`,
   });
 
   // Integração 6: necessidade de indisponibilidade bloqueia o quarto até liberação autorizada.
@@ -177,6 +180,7 @@ export function criar(db, usuario, dados, agora) {
       });
     }
   }
+  if (tecnicoNaAbertura) executarAcao(db, usuario, os.id, 'aceitar', { responsavel_id: tecnicoNaAbertura.id, texto: 'Solicitação aceita e designada na abertura.' }, agora);
   return os.id;
 }
 
@@ -322,7 +326,7 @@ export const ACOES = {
     exec(db, u, os, d, agora) {
       const prazo = normalizarData(d.prazo_previsto);
       exigir(prazo, 'Informe o prazo.');
-      atualizar(db, os, { prazo_previsto: prazo, alerta_prazo_em: null, alerta_atraso_em: null });
+      atualizar(db, os, { prazo_previsto: prazo, alerta_prazo_em: null, alerta_atraso_em: null, alerta_escalonamento_em: null });
       evento(db, os, u, 'prazo', { texto: `Prazo de atendimento definido para ${new Date(prazo).toLocaleString('pt-BR')}.${texto(d.texto) ? ` ${texto(d.texto)}` : ''}`, agora });
       notificar(db, [os.aberto_por, os.responsavel_id], { tipo: 'prazo_proximo', mensagem: `Prazo de ${rotulo(os)} definido para ${new Date(prazo).toLocaleString('pt-BR')}.`, os_id: os.id, excluir: u.id, agora });
     },
@@ -474,7 +478,9 @@ export const ACOES = {
     rotulo: 'Aprovar serviço (validar)',
     pode: (db, u, os) => os.status === 'concluida' && ehValidador(u, os),
     exec(db, u, os, d, agora) {
-      atualizar(db, os, { validado_por: u.id, validado_em: agoraIso(agora) });
+      const nota = d.nota ? Number(d.nota) : null;
+      exigir(nota == null || (Number.isInteger(nota) && nota >= 1 && nota <= 5), 'A nota do serviço deve ser de 1 a 5.');
+      atualizar(db, os, { validado_por: u.id, validado_em: agoraIso(agora), avaliacao_nota: nota, avaliacao_comentario: nota ? texto(d.comentario_avaliacao).slice(0, 500) || null : null });
       encerrar(db, u, os, { texto: `Serviço validado por ${u.nome}.${texto(d.texto) ? ` Observações: ${texto(d.texto)}` : ''}`, agora });
       if (d.liberar_quarto && os.quarto_id) quartos.liberar(db, u, os.quarto_id, { os_id: os.id, observacao: `Liberado após validação de ${os.protocolo}`, agora });
       notificar(db, [os.responsavel_id, os.executado_por, os.recebido_por], { tipo: 'aprovada', mensagem: `${rotulo(os)} foi validada e encerrada.`, os_id: os.id, excluir: u.id, agora });
@@ -495,7 +501,7 @@ export const ACOES = {
     pode: (db, u, os) => os.status === 'encerrada' && ehValidador(u, os),
     exec(db, u, os, d, agora) {
       mudarStatus(db, os, u, 'em_avaliacao', {
-        campos: { reaberturas: os.reaberturas + 1, concluido_em: null, encerrado_em: null, validado_em: null, validado_por: null, alerta_atraso_em: null, alerta_prazo_em: null },
+        campos: { reaberturas: os.reaberturas + 1, concluido_em: null, encerrado_em: null, validado_em: null, validado_por: null, avaliacao_nota: null, avaliacao_comentario: null, alerta_atraso_em: null, alerta_prazo_em: null, alerta_escalonamento_em: null },
         texto: `Demanda reaberta: ${d.texto}`, agora,
       });
       if (d.bloquear_quarto && os.quarto_id) quartos.bloquear(db, u, os.quarto_id, { motivo: `${os.protocolo} reaberta: ${d.texto}`, os_id: os.id, agora });

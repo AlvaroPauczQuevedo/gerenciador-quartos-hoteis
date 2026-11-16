@@ -1,30 +1,40 @@
 import { scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
 import { todos, um, exec } from '../db.js';
 import { PAPEIS } from './constantes.js';
-import { exigir, exigirPapel, texto, somarHoras, agoraIso, visaoRede } from './comum.js';
+import { ErroHttp, exigir, exigirPapel, texto, somarHoras, agoraIso, visaoRede } from './comum.js';
+import { verificarSegundoFator } from './seguranca.js';
 
 export function hashSenha(senha) {
   const sal = randomBytes(16).toString('hex');
   return `${sal}:${scryptSync(senha, sal, 32).toString('hex')}`;
 }
 
-function conferirSenha(senha, hash) {
+export function conferirSenha(senha, hash) {
   const [sal, h] = hash.split(':');
   const calc = scryptSync(senha, sal, 32);
   return timingSafeEqual(calc, Buffer.from(h, 'hex'));
 }
 
-const PUBLICO = 'u.id, u.nome, u.login, u.papel, u.hotel_id, u.ativo, u.trocar_senha, h.nome AS hotel_nome';
+const PUBLICO = 'u.id, u.nome, u.login, u.papel, u.hotel_id, u.ativo, u.trocar_senha, u.totp_ativo, h.nome AS hotel_nome';
 
 // Nome de usuário: minúsculas, números, ponto, hífen e sublinhado.
 export const normalizarLogin = (v) => texto(v).toLowerCase();
 const LOGIN_VALIDO = /^[a-z0-9][a-z0-9._-]{2,29}$/;
 
-export function login(db, nomeUsuario, senha) {
+// Senha correta mas conta com verificação em duas etapas e sem código: o cliente deve pedir o código.
+export class ErroSegundoFator extends ErroHttp {
+  constructor() { super(401, 'Informe o código de verificação.'); this.segundoFator = true; }
+}
+
+export function login(db, nomeUsuario, senha, { codigo, ip = null, aparelho = null, agora } = {}) {
   const u = um(db, 'SELECT * FROM usuarios WHERE login = ? AND ativo = 1 AND excluido_em IS NULL', normalizarLogin(nomeUsuario));
   exigir(u && conferirSenha(String(senha || ''), u.senha_hash), 'Usuário ou senha inválidos.', 401);
+  if (u.totp_ativo) {
+    if (!String(codigo || '').trim()) throw new ErroSegundoFator();
+    exigir(verificarSegundoFator(db, u, codigo, agora), 'Código de verificação incorreto.', 401);
+  }
   const token = randomBytes(32).toString('hex');
-  exec(db, 'INSERT INTO sessoes (token, usuario_id, expira_em) VALUES (?, ?, ?)', token, u.id, somarHoras(agoraIso(), 12));
+  exec(db, 'INSERT INTO sessoes (token, usuario_id, expira_em, criado_em, ip, aparelho) VALUES (?, ?, ?, ?, ?, ?)', token, u.id, somarHoras(agoraIso(agora), 12), agoraIso(agora), ip, aparelho);
   return token;
 }
 

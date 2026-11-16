@@ -1,5 +1,6 @@
-import { estado, api, post, ehRede, marcaDoUsuario } from './estado.js';
+import { estado, api, post, qs, ehRede, marcaDoUsuario } from './estado.js';
 import { html, render, $, toast, esc, modal, dadosForm } from './ui.js';
+import * as offline from './offline.js';
 import { iniciarPWA, podeInstalar, instalar, aoMudar, aoSair, revincular } from './pwa.js';
 
 const ROTAS = [
@@ -19,6 +20,9 @@ const ROTAS = [
   [/^\/cadastros$/, 'cadastros'],
   [/^\/qrcodes$/, 'qrcodes'],
   [/^\/auditoria$/, 'auditoria'],
+  [/^\/obrigacoes$/, 'obrigacoes'],
+  [/^\/conta$/, 'conta'],
+  [/^\/pendencias$/, 'pendencias'],
   [/^\/preventiva$/, 'preventiva'],
   [/^\/estoque$/, 'estoque'],
   [/^\/backups$/, 'backups'],
@@ -33,10 +37,12 @@ function menu() {
   add('#/inicio', p === 'tecnico' ? 'Meus serviços' : 'Início');
   if (['gerente', 'governanta', 'admin'].includes(p)) add('#/os/nova', 'Nova solicitação');
   add('#/os', p === 'tecnico' ? 'Painel da manutenção' : 'Demandas (OS)');
+  if (p === 'tecnico') add('#/pendencias', 'Envios pendentes');
   add('#/quartos', 'Quartos');
   if (['gerente', 'governanta', 'admin'].includes(p)) add('#/inspecoes', 'Inspeções');
   if (['gerente', 'admin'].includes(p)) add('#/preventiva', 'Preventiva');
   if (['gerente', 'admin'].includes(p)) add('#/estoque', 'Estoque');
+  if (['gerente', 'admin', 'diretoria'].includes(p)) add('#/obrigacoes', 'Obrigações legais');
   if (p !== 'tecnico' && p !== 'governanta') {
     add('#/indicadores', 'Indicadores', 'Gestão');
     add('#/recorrencia', 'Recorrência', 'Gestão');
@@ -63,6 +69,7 @@ function shell() {
         <div class="rodape">
           <strong>${u.nome}</strong><br><span style="opacity:.75">${estado.meta.PAPEIS[u.papel]}${` · ${u.hotel_nome || (estado.hoteis.length === 1 ? estado.hoteis[0].nome : 'Rede')}`}</span>
           <button class="btn claro pequeno" id="instalar-app" hidden>📲 Instalar app</button>
+          <a class="btn claro pequeno" href="#/conta">Minha conta</a>
           <button class="btn claro pequeno" id="senha">Alterar senha</button>
           <button class="btn claro pequeno" id="sair">Sair</button>
         </div>
@@ -74,10 +81,11 @@ function shell() {
           <span class="topo-acoes"><button id="instalar-app-m" class="instalar-topo" hidden aria-label="Instalar o app">📲 Instalar</button>
           <a href="#/notificacoes" aria-label="Notificações">🔔 <span class="contador" id="cont-notif-m"></span></a></span>
         </header>
+        <div id="faixa-offline" class="faixa-offline" hidden role="status"></div>
         <main class="conteudo" id="conteudo"></main>
       </div>
     </div>`);
-  $('#sair').addEventListener('click', async () => { await aoSair(); await post('/api/logout'); location.hash = ''; iniciar(); });
+  $('#sair').addEventListener('click', sair);
   const botoesInstalar = [$('#instalar-app'), $('#instalar-app-m')];
   const atualizarInstalar = () => { for (const b of botoesInstalar) b.hidden = !podeInstalar(); };
   for (const b of botoesInstalar) b.addEventListener('click', instalar);
@@ -129,12 +137,62 @@ async function pollNotificacoes() {
   } catch { /* silencioso */ }
 }
 
+// Saída: avisa se há ações feitas sem internet que ainda não foram enviadas e apaga os dados guardados no aparelho.
+async function sair() {
+  const pendentes = await offline.contarPendentes();
+  if (pendentes && !window.confirm(`Há ${pendentes} ação(ões) feita(s) sem internet que ainda não foram enviadas. Se sair agora, elas serão perdidas. Sair mesmo assim?`)) return;
+  await aoSair();
+  try { await post('/api/logout'); } catch { /* sem internet: encerra só neste aparelho */ }
+  await offline.limparTudo();
+  location.hash = '';
+  iniciar();
+}
+
+// Faixa de aviso (sem internet / ações aguardando envio) e envio automático da fila.
+let faixaPronta = false;
+async function atualizarFaixa() {
+  const el = $('#faixa-offline');
+  if (!el) return;
+  const pendentes = estado.usuario ? await offline.contarPendentes() : 0;
+  const semRede = offline.modoTecnico() && offline.estaSemRede();
+  if (!semRede && !pendentes) { el.hidden = true; return; }
+  el.hidden = false;
+  el.className = `faixa-offline ${semRede ? 'sem-rede' : 'enviando'}`;
+  el.innerHTML = `${semRede ? 'Sem conexão: você vê os dados salvos e suas ações serão enviadas quando a internet voltar.' : 'Enviando suas ações…'}${pendentes ? ` <a href="#/pendencias"><strong>${pendentes} aguardando envio</strong></a>` : ''}`;
+}
+function iniciarOffline() {
+  if (faixaPronta) return;
+  faixaPronta = true;
+  const tentar = () => { if (estado.usuario && offline.modoTecnico()) offline.sincronizar(estado.usuario.id).catch(() => {}); };
+  window.addEventListener('fila-mudou', atualizarFaixa);
+  window.addEventListener('online', () => { offline.marcarRede(true); tentar(); });
+  window.addEventListener('offline', () => offline.marcarRede(false));
+  window.addEventListener('fila-sincronizada', () => { if (!document.querySelector('#modal-raiz')?.firstElementChild) recarregar(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) tentar(); });
+  setInterval(tentar, 30000);
+  tentar();
+}
+
+// Deixa guardadas no aparelho as OS do técnico (e os detalhes), para consultar e trabalhar sem internet.
+async function prepararOffline() {
+  if (!offline.modoTecnico()) return;
+  try {
+    const abertas = await api(`/api/os${qs({ limite: 8, responsavel_id: 'eu', grupo: 'todas_abertas' })}`);
+    await api(`/api/os${qs({ limite: 8, grupo: 'aprovadas' })}`).catch(() => {});
+    const minhas = await api(`/api/os${qs({ responsavel_id: 'eu', grupo: 'todas_abertas', limite: 40 })}`);
+    for (const o of [...new Map([...abertas, ...minhas].map((x) => [x.id, x])).values()].slice(0, 40)) await api(`/api/os/${o.id}`).catch(() => {});
+    await api('/api/resumo').catch(() => {});
+  } catch { /* sem internet: segue com o que já está guardado */ }
+}
+
 let navegacaoAtual = 0;
 async function navegar() {
   if (!estado.usuario) return;
   const caminho = location.hash.replace(/^#/, '').split('?')[0] || '/';
   const qr = /^\/q\/(\d+)$/.exec(caminho);
   if (qr) { location.replace(`#/quartos/${qr[1]}`); return; } // etiqueta QR na porta do quarto
+  const relato = /^\/relatar\/(\d+)$/.exec(caminho);
+  if (relato) { location.replace(`#/quartos/${relato[1]}`); return; } // quem já tem login vê a ficha do quarto
   const query = Object.fromEntries(new URLSearchParams(location.hash.split('?')[1] || ''));
   const rota = ROTAS.find(([re]) => re.test(caminho));
   const el = $('#conteudo');
@@ -166,16 +224,30 @@ async function iniciar() {
   try {
     const eu = await api('/api/eu');
     Object.assign(estado, eu);
+    offline.definirModoTecnico(estado.usuario.papel === 'tecnico');
     if (estado.usuario.trocar_senha) {
       const { mostrar } = await import('./views/trocar-senha.js');
-      mostrar($('#app'), () => iniciar(), async () => { await aoSair(); await post('/api/logout'); location.hash = ''; iniciar(); });
+      mostrar($('#app'), () => iniciar(), sair);
       return;
     }
     shell();
     navegar();
     revincular();
-  } catch {
+    iniciarOffline();
+    atualizarFaixa();
+    prepararOffline();
+  } catch (e) {
+    if (e?.status === 0) { // sem internet e sem dados guardados: não é logout
+      render($('#app'), html`<div class="login"><div class="card"><h1 style="font-size:1.15rem">Sem conexão</h1><p class="muted">Conecte-se à internet para abrir o sistema. Depois do primeiro acesso, o profissional de manutenção consegue consultar suas OS e registrar ações mesmo sem sinal.</p><button class="btn primario" id="tentar-de-novo">Tentar de novo</button></div></div>`);
+      $('#tentar-de-novo')?.addEventListener('click', () => iniciar());
+      return;
+    }
     estado.usuario = null;
+    const relato = /^#\/relatar\/(\d+)/.exec(location.hash);
+    if (relato) { // QR da porta sem login: página pública de relato de problema
+      const { mostrar } = await import('./views/relatar.js');
+      return mostrar($('#app'), relato[1], () => iniciar());
+    }
     const { mostrar } = await import('./views/login.js');
     mostrar($('#app'), async () => iniciar());
   }
@@ -185,8 +257,9 @@ window.addEventListener('hashchange', navegar);
 window.addEventListener('sessao-expirada', () => { if (estado.usuario) { estado.usuario = null; toast('Sessão expirada.', 'erro'); iniciar(); } });
 window.addEventListener('unhandledrejection', (e) => { if (e.reason?.message) toast(e.reason.message, 'erro'); });
 setInterval(pollNotificacoes, 30000);
+setInterval(prepararOffline, 5 * 60e3);
 document.addEventListener('visibilitychange', pollNotificacoes);
-window.addEventListener('offline', () => toast('Sem conexão com a internet. As alterações não serão salvas até a conexão voltar.', 'erro'));
+window.addEventListener('offline', () => toast(offline.modoTecnico() ? 'Sem conexão: suas ações ficam guardadas no aparelho e serão enviadas quando a internet voltar.' : 'Sem conexão com a internet. As alterações não serão salvas até a conexão voltar.', 'erro'));
 window.addEventListener('online', () => toast('Conexão restabelecida.'));
 iniciarPWA();
 iniciar();

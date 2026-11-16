@@ -8,8 +8,8 @@ const RESUMO_PUSH = {
   tecnico: 'serviços designados a você, correções pedidas, prazos próximos e atrasos',
   gerente: 'serviços concluídos aguardando sua validação, quartos bloqueados, devoluções, recusas, recorrências e emergências',
   governanta: 'inspeções vencidas, devoluções, recusas e serviços concluídos das suas solicitações',
-  diretoria: 'orçamentos aguardando aprovação e recorrências críticas',
-  admin: 'orçamentos aguardando aprovação e recorrências críticas',
+  diretoria: 'orçamentos aguardando aprovação, recorrências críticas e atrasos que passaram do limite',
+  admin: 'orçamentos aguardando aprovação, recorrências críticas, atrasos escalonados e avisos do sistema (como falha de backup)',
 };
 
 async function quadroPush() {

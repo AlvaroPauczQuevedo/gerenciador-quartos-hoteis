@@ -1,4 +1,4 @@
-import { estado, api, post, qs } from '../estado.js';
+import { estado, api, post, qs, papel } from '../estado.js';
 import { html, render, raw, $, opcoes, seletorHotel, campoUpload, dadosForm, paraInputData, toast, data } from '../ui.js';
 
 export async function mostrar(el, _p, query) {
@@ -30,6 +30,11 @@ export async function mostrar(el, _p, query) {
         <div id="alerta-recorrencia" style="margin-top:1rem"></div>
         <div class="campo" style="margin-top:1rem"><span>Fotografias ou vídeos</span><div id="upload"></div></div>
       </section>
+      ${papel('gerente', 'admin') ? html`<section class="card">
+        <h2>Atendimento</h2>
+        <div class="form-grade"><label class="campo"><span>Designar técnico agora</span><select name="responsavel_id"><option value="">Decidir depois</option></select>
+          <small>Escolhendo um técnico, a solicitação já nasce aceita e ele é avisado na hora.</small></label></div>
+      </section>` : ''}
       <section class="card">
         <h2>Prioridade e impacto</h2>
         <div class="opcoes-prioridade">${Object.entries(M.PRIORIDADES).map(([k, v]) => html`
@@ -55,7 +60,14 @@ export async function mostrar(el, _p, query) {
   const selEquip = form.elements.equipamento_id;
   let equipamentos = [];
 
+  async function carregarTecnicos() {
+    const sel = form.elements.responsavel_id;
+    if (!sel) return;
+    const lista = (await api(`/api/usuarios${qs({ hotel_id: selHotel.value })}`)).filter((x) => x.papel === 'tecnico' && x.ativo);
+    sel.innerHTML = html`<option value="">${lista.length ? 'Decidir depois' : 'Nenhum técnico cadastrado neste hotel'}</option>${lista.map((t) => html`<option value="${t.id}">${t.nome}</option>`)}`.s;
+  }
   async function carregarQuartos() {
+    await carregarTecnicos();
     const quartos = await api(`/api/quartos${qs({ hotel_id: selHotel.value })}`);
     selQuarto.innerHTML = html`<option value="">Não se aplica (área comum)</option>${quartos.map((q) => html`<option value="${q.id}">${q.numero}${q.tipo ? ` — ${q.tipo}` : ''}${q.status_comercial === 'bloqueado' ? ' (bloqueado)' : ''}</option>`)}`.s;
     if (query.quarto_id) { selQuarto.value = query.quarto_id; query.quarto_id = null; }
@@ -105,7 +117,7 @@ export async function mostrar(el, _p, query) {
     try {
       const d = dadosForm(form);
       const r = await post('/api/os', { ...d, fotos: obterFotos() });
-      toast(`Solicitação ${r.protocolo} aberta. A manutenção foi notificada.`);
+      toast(d.responsavel_id ? `Solicitação ${r.protocolo} aberta e designada ao técnico.` : `Solicitação ${r.protocolo} aberta. O gerente foi notificado.`);
       location.hash = `#/os/${r.id}`;
     } catch (err) {
       erro.textContent = err.message;

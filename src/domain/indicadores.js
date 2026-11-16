@@ -43,6 +43,8 @@ function resumir(lista, now) {
     reabertas: lista.filter((o) => o.reaberturas > 0).length,
     correcoes: lista.reduce((s, o) => s + o.correcoes, 0),
     recorrentes: lista.filter((o) => o.recorrente).length,
+    nota_media: media(lista.filter((o) => o.avaliacao_nota).map((o) => o.avaliacao_nota)),
+    avaliacoes: lista.filter((o) => o.avaliacao_nota).length,
     custo_total: custo,
     custo_medio: concluidas.length ? concluidas.reduce((s, o) => s + o.custo, 0) / concluidas.length : null,
   };

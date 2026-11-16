@@ -3,11 +3,14 @@ import { todos, exec } from '../db.js';
 import { STATUS_ENTREGUES } from './constantes.js';
 import { agoraIso, somarHoras } from './comum.js';
 import { gerar as gerarPreventivas } from './preventiva.js';
+import { verificar as verificarObrigacoes } from './obrigacoes.js';
 import { notificar, equipeManutencao, gerentesDoHotel, usuariosDoHotel } from './notificacoes.js';
 
 const ENTREGUES_SQL = STATUS_ENTREGUES.map((s) => `'${s}'`).join(',');
 // Antecedência do alerta de "prazo próximo" por prioridade (horas).
 const ANTECEDENCIA = { emergencial: 1, alta: 6, media: 24, baixa: 48 };
+// Depois de quantas horas de atraso a diretoria também é avisada (o gerente já foi avisado no vencimento).
+export const ESCALONA_APOS = { emergencial: 2, alta: 12, media: 24, baixa: 48 };
 
 export function verificar(db, agora) {
   const now = agoraIso(agora);
@@ -22,6 +25,12 @@ export function verificar(db, agora) {
           tipo: 'atrasada', mensagem: `${rot} está atrasada (prazo: ${new Date(os.prazo_previsto).toLocaleString('pt-BR')}).`, os_id: os.id, quarto_id: os.quarto_id, agora,
         });
         exec(db, 'UPDATE ordens_servico SET alerta_atraso_em = ? WHERE id = ?', now, os.id);
+      } else if (!os.alerta_escalonamento_em && os.prazo_previsto < somarHoras(now, -(ESCALONA_APOS[os.prioridade] ?? 24))) {
+        enviados += notificar(db, usuariosDoHotel(db, os.hotel_id, ['diretoria', 'admin']), {
+          tipo: 'escalonada', os_id: os.id, quarto_id: os.quarto_id, agora,
+          mensagem: `${rot} segue atrasada há mais de ${ESCALONA_APOS[os.prioridade] ?? 24} h (prazo: ${new Date(os.prazo_previsto).toLocaleString('pt-BR')}).`,
+        });
+        exec(db, 'UPDATE ordens_servico SET alerta_escalonamento_em = ? WHERE id = ?', now, os.id);
       }
     } else if (!os.alerta_prazo_em && os.prazo_previsto <= somarHoras(now, ANTECEDENCIA[os.prioridade] ?? 24)) {
       enviados += notificar(db, [os.responsavel_id, ...equipeManutencao(db, os.hotel_id)], {
@@ -31,8 +40,16 @@ export function verificar(db, agora) {
     }
   }
 
+  exec(db, 'DELETE FROM idempotencia WHERE criado_em < ?', somarHoras(now, -24 * 30));
+
+  // Os relatos por QR code entram em nome de uma conta técnica; os avisos dela não têm leitor.
+  exec(db, "DELETE FROM notificacoes WHERE usuario_id IN (SELECT id FROM usuarios WHERE login LIKE 'relato-qr-%')");
+
   // Manutenção preventiva: gera as OS dos planos que venceram.
   enviados += gerarPreventivas(db, agora);
+
+  // Obrigações legais: avisos de 30 e 7 dias antes do vencimento e de vencidas.
+  enviados += verificarObrigacoes(db, agora);
 
   // Inspeções vencidas: um único aviso por hotel a cada rodada, com a lista de quartos.
   const vencidas = todos(db, 'SELECT * FROM quartos WHERE proxima_inspecao_em < ? AND alerta_inspecao_enviado_em IS NULL ORDER BY hotel_id, CAST(numero AS INTEGER), numero', now);

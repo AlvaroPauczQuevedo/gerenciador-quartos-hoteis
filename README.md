@@ -25,6 +25,18 @@ Se algum teste falhar, o `main` não muda e o erro aparece na aba **Actions** do
 - **Relatórios:** exportação para Excel em Demandas, Quartos e Indicadores, e OS para imprimir ou salvar em PDF.
 - **Inspeção com conexão instável:** se a internet cair no meio da inspeção, as respostas ficam guardadas no aparelho e são enviadas quando a conexão volta. As fotos ainda precisam de conexão.
 
+## Novidades de gestão e segurança
+- **Designar o técnico ao abrir a OS:** o gerente escolhe o técnico no próprio formulário; a solicitação já nasce aceita e o técnico é avisado.
+- **Escalonamento de atraso:** o gerente é avisado quando a OS vence; se o atraso passar do limite da prioridade (emergencial 2 h, alta 12 h, média 24 h, baixa 48 h), a diretoria e o administrador também são avisados.
+- **Avaliação do serviço:** ao validar, o gerente (ou quem abriu a OS) dá nota de 1 a 5; a média aparece em Indicadores.
+- **Relato pelo QR code, sem login:** o QR da porta, escaneado por quem não tem login, abre um formulário (descrição, foto opcional, nome opcional). Fica **desligado por padrão**; o gerente ou o administrador liga por hotel (Cadastros). Limites: 5 envios por aparelho por hora, 6 por quarto por dia, campo-isca contra robôs, prioridade fixa em média, uma foto leve. A OS entra em nome de uma conta técnica "Relato pelo QR code", que não faz login.
+- **Obrigações legais e contratos:** PMOC, caixa d'água, extintores, AVCB, dedetização, elevadores, gerador, caixa de gordura e SPDA, por hotel. "Criar lista padrão" cadastra as comuns (periodicidades são sugestões a confirmar com o engenheiro responsável); registrar a realização guarda o comprovante (foto ou PDF) e recalcula o vencimento; avisos 30 e 7 dias antes e ao vencer (neste caso também à diretoria/administração).
+- **Modo offline do técnico:** o profissional de manutenção continua trabalhando sem internet. As OS dele (e os detalhes) ficam guardadas no aparelho; sem sinal, ele assume, inicia, pausa por material, registra dificuldade e custo, usa material do estoque, conclui atividades, comenta, anexa fotos e registra a conclusão. As ações entram numa fila (IndexedDB) e são enviadas sozinhas, em ordem, quando a internet volta. Cada ação leva uma chave única (`_idem`): se a resposta se perder, o reenvio não repete nada (o servidor guarda as chaves por 30 dias). Se o servidor recusar uma ação (por exemplo, o gerente já tratou a OS), ela aparece em **Envios pendentes** para refazer ou descartar. Ao sair da conta, os dados guardados no aparelho são apagados (com aviso se houver ações não enviadas). O perfil gerente e os demais continuam exigindo internet.
+- **Registro de acessos:** aba "Acessos" em Registro de ações (entradas, saídas, tentativas recusadas, bloqueios; IP e aparelho; senha nunca gravada; guardado 180 dias).
+- **Verificação em duas etapas (TOTP):** opcional, em Minha conta, com aplicativo autenticador e 8 códigos de recuperação. Administrador e diretoria recebem um aviso recomendando ativar. Quem perdeu o celular e os códigos tem o 2º fator redefinido pelo administrador (ou pelo gerente, para a equipe do hotel).
+- **Aparelhos conectados:** em Minha conta, lista de sessões abertas, com opção de encerrar.
+- **Monitoramento:** `/healthz` responde 503 se o banco falhar ou se o último backup tiver mais de 48 h; aponte um monitor externo (ex.: UptimeRobot) para ele. Falha no backup diário também avisa os administradores no sistema.
+
 ## App instalável e notificações no celular
 
 - O sistema pode ser instalado na tela inicial (Android, iPhone e computador) pelo botão **📲 Instalar app** no menu. No iPhone, a instalação é feita pelo Safari → Compartilhar → "Adicionar à Tela de Início".

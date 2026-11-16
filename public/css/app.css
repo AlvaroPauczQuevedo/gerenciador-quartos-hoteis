@@ -391,3 +391,9 @@ input[type="password"]::-ms-reveal, input[type="password"]::-ms-clear { display:
 .rel-assinaturas div { border-top: 1px solid #000; padding-top: 4px; text-align: center; font-size: 11px; }
 .rel-rodape { margin-top: 14px; font-size: 9px; color: #666; text-align: center; }
 @media print { .relatorio { padding: 0; border-radius: 0; max-width: none; } }
+
+/* Faixa de estado do modo offline (profissional de manutenção) */
+.faixa-offline { position: sticky; top: 0; z-index: 30; padding: .55rem 1rem; font-size: .88rem; border-bottom: 1px solid; }
+.faixa-offline.sem-rede { background: var(--warn-soft); border-color: var(--warn); color: var(--text); }
+.faixa-offline.enviando { background: var(--info-soft, var(--warn-soft)); border-color: var(--info, var(--warn)); color: var(--text); }
+.faixa-offline[hidden] { display: none; }

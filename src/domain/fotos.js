@@ -12,6 +12,19 @@ const TIPOS = {
   'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov',
 };
 export const TAMANHO_MAX = 15 * 1024 * 1024;
+const TIPOS_COMPROVANTE = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf' };
+
+// Comprovantes de obrigações legais (imagem ou PDF): ficam em uploads e são servidos por buscarArquivo.
+export function guardarComprovante(dataUrl, uploadsDir) {
+  const m = /^data:([\w/+.-]+);base64,(.+)$/s.exec(dataUrl || '');
+  exigir(m && TIPOS_COMPROVANTE[m[1]], 'Comprovante inválido. Envie uma imagem (JPG, PNG, WEBP) ou um PDF.');
+  const buf = Buffer.from(m[2], 'base64');
+  exigir(buf.length > 0 && buf.length <= TAMANHO_MAX, 'Comprovante vazio ou maior que 15 MB.');
+  mkdirSync(uploadsDir, { recursive: true });
+  const nome = `${randomUUID()}.${TIPOS_COMPROVANTE[m[1]]}`;
+  writeFileSync(join(uploadsDir, nome), buf);
+  return { nome, mime: m[1] };
+}
 
 function validarArquivo(dataUrl) {
   const m = /^data:([\w/+.-]+);base64,(.+)$/s.exec(dataUrl || '');
@@ -69,7 +82,7 @@ export function salvar(db, usuario, dados, { uploadsDir }, agora) {
 }
 
 export function buscarArquivo(db, usuario, nome) {
-  const f = um(db, 'SELECT * FROM fotos WHERE arquivo = ?', nome);
+  const f = um(db, 'SELECT * FROM fotos WHERE arquivo = ?', nome) || um(db, 'SELECT * FROM obrigacoes_registros WHERE arquivo = ?', nome);
   exigir(f, 'Arquivo não encontrado.', 404);
   exigirHotel(usuario, f.hotel_id);
   return f;

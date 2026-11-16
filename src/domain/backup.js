@@ -47,6 +47,12 @@ export async function gerar(db, dataDir, { manual = false, agora } = {}) {
   return nome;
 }
 
+// Idade (em horas) do backup mais recente; null se não houver nenhum.
+export function idadeUltimoBackupHoras(dataDir, agora = Date.now()) {
+  const ultimo = listar(dataDir)[0];
+  return ultimo ? (agora - new Date(ultimo.criado_em).getTime()) / 3600e3 : null;
+}
+
 // Chamado pelo agendador: gera o backup do dia se ainda não existir.
 let emAndamento = false;
 export async function backupDiario(db, dataDir, agora) {

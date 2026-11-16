@@ -47,6 +47,7 @@ export async function mostrar(el, _p, query) {
       ${kpi('Resolução dentro do prazo', pct(g.taxa_no_prazo), { classe: g.taxa_no_prazo >= 80 ? 'bom' : g.taxa_no_prazo != null ? 'atencao' : '' })}
       ${kpi('Demandas reabertas', g.reabertas, { detalhe: `${g.correcoes} correção(ões) solicitada(s)` })}
       ${kpi('Problemas recorrentes', g.recorrentes, { href: '#/recorrencia' })}
+      ${kpi('Avaliação dos serviços', g.nota_media == null ? '—' : `${g.nota_media.toFixed(1).replace('.', ',')} / 5`, { detalhe: g.avaliacoes ? `${g.avaliacoes} avaliação(ões) na validação` : 'ainda sem avaliações', classe: g.nota_media != null ? (g.nota_media >= 4 ? 'bom' : g.nota_media >= 3 ? 'atencao' : 'alerta') : '' })}
       ${kpi('Custo total', moeda(g.custo_total))}
       ${kpi('Custo médio por manutenção', moeda(g.custo_medio))}
     </div>

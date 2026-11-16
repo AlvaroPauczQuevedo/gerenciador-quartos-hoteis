@@ -10,6 +10,9 @@ import * as inspecoes from './domain/inspecoes.js';
 import * as notificacoes from './domain/notificacoes.js';
 import * as push from './domain/push.js';
 import * as auditoria from './domain/auditoria.js';
+import * as relatos from './domain/relatos.js';
+import * as obrigacoes from './domain/obrigacoes.js';
+import * as seguranca from './domain/seguranca.js';
 import * as backup from './domain/backup.js';
 import * as preventiva from './domain/preventiva.js';
 import * as estoque from './domain/estoque.js';
@@ -40,11 +43,36 @@ export function criarRotas() {
   get('/api/eu', ({ db, usuario }) => ({
     usuario, meta: meta(), hoteis: usuarios.listarHoteis(db, usuario), naoLidas: notificacoes.contarNaoLidas(db, usuario.id),
   }));
+  // ---- segurança da conta ----
+  get('/api/eu/seguranca', ({ db, usuario, cliente }) => ({ doisFatores: seguranca.estado2FA(db, usuario), sessoes: seguranca.listarSessoes(db, usuario, cliente.sessao) }));
+  post('/api/eu/2fa/iniciar', ({ db, usuario, body }) => seguranca.iniciar2FA(db, usuario, body));
+  post('/api/eu/2fa/ativar', ({ db, usuario, body }) => {
+    const r = seguranca.ativar2FA(db, usuario, body);
+    aud(db, usuario, 'doisfatores_ativado', { hotel_id: usuario.hotel_id, alvo: usuario.login });
+    return r;
+  });
+  post('/api/eu/2fa/desativar', ({ db, usuario, body }) => {
+    seguranca.desativar2FA(db, usuario, body);
+    aud(db, usuario, 'doisfatores_desativado', { hotel_id: usuario.hotel_id, alvo: usuario.login });
+    return { ok: true };
+  });
+  post('/api/usuarios/:id/2fa/resetar', ({ db, usuario, params }) => {
+    const alvo = seguranca.resetar2FA(db, usuario, params.id);
+    aud(db, usuario, 'doisfatores_resetado', { hotel_id: alvo.hotel_id, alvo: alvo.login });
+    return { ok: true };
+  });
+  post('/api/eu/sessoes/encerrar', ({ db, usuario, body, cliente }) => { seguranca.encerrarSessao(db, usuario, body.id, cliente.sessao); return { ok: true }; });
+  post('/api/eu/sessoes/encerrar-outras', ({ db, usuario, cliente }) => ({ encerradas: seguranca.encerrarOutrasSessoes(db, usuario, cliente.sessao) }));
   get('/api/resumo', ({ db, usuario }) => resumoInicial(db, usuario));
 
   // ---- cadastros ----
   get('/api/hoteis', ({ db, usuario }) => usuarios.listarHoteis(db, usuario));
   post('/api/hoteis', ({ db, usuario, body }) => { const id = usuarios.criarHotel(db, usuario, body); aud(db, usuario, 'hotel_criado', { hotel_id: id, alvo: body.nome }); return { id }; });
+  post('/api/hoteis/:id/relato-publico', ({ db, usuario, params, body }) => {
+    const h = relatos.definirAtivo(db, usuario, params.id, !!body.ativo);
+    aud(db, usuario, 'hotel_alterado', { hotel_id: h.id, alvo: h.nome, detalhes: { relato_publico: !!body.ativo } });
+    return { ok: true };
+  });
   put('/api/hoteis/:id', ({ db, usuario, params, body }) => { usuarios.atualizarHotel(db, usuario, params.id, body); aud(db, usuario, 'hotel_alterado', { hotel_id: Number(params.id), detalhes: body }); return { ok: true }; });
   get('/api/usuarios', ({ db, usuario, query }) => usuarios.listarUsuarios(db, usuario, query));
   post('/api/usuarios', ({ db, usuario, body }) => { const id = usuarios.criarUsuario(db, usuario, body); const a = alvoUsuario(db, id); aud(db, usuario, 'usuario_criado', { hotel_id: a.hotel_id, alvo: a.login, detalhes: { papel: body.papel } }); return { id }; });
@@ -102,6 +130,36 @@ export function criarRotas() {
     anexar(db, usuario, body.fotos, { os_id: id, fase }, ctx);
     os.executarAcao(db, usuario, id, params.acao, body);
     return os.detalhe(db, usuario, id);
+  });
+
+  // ---- obrigações legais e contratos com vencimento ----
+  get('/api/obrigacoes', ({ db, usuario, query }) => ({ itens: obrigacoes.listar(db, usuario, query), tipos: obrigacoes.TIPOS_OBRIGACAO }));
+  get('/api/obrigacoes/resumo', ({ db, usuario, query }) => obrigacoes.resumo(db, usuario, query));
+  get('/api/obrigacoes/:id/historico', ({ db, usuario, params }) => obrigacoes.historico(db, usuario, params.id));
+  post('/api/obrigacoes', ({ db, usuario, body }) => {
+    const id = obrigacoes.criar(db, usuario, body);
+    aud(db, usuario, 'obrigacao_criada', { hotel_id: Number(body.hotel_id || usuario.hotel_id), alvo: body.nome || body.tipo });
+    return { id };
+  });
+  post('/api/obrigacoes/modelos', ({ db, usuario, body }) => {
+    const criadas = obrigacoes.criarModelos(db, usuario, body.hotel_id);
+    aud(db, usuario, 'obrigacao_criada', { hotel_id: Number(body.hotel_id || usuario.hotel_id), alvo: 'Modelos padrão', detalhes: { criadas } });
+    return { criadas };
+  });
+  put('/api/obrigacoes/:id', ({ db, usuario, params, body }) => {
+    const o = obrigacoes.atualizar(db, usuario, params.id, body);
+    aud(db, usuario, 'obrigacao_alterada', { hotel_id: o.hotel_id, alvo: o.nome, detalhes: body });
+    return { ok: true };
+  });
+  post('/api/obrigacoes/:id/registrar', ({ db, usuario, params, body, ctx }) => {
+    const r = obrigacoes.registrar(db, usuario, params.id, body, ctx);
+    aud(db, usuario, 'obrigacao_registrada', { hotel_id: r.obrigacao.hotel_id, alvo: r.obrigacao.nome, detalhes: { realizado_em: body.realizado_em, proxima_em: r.proxima_em, comprovante: !!body.comprovante } });
+    return { proxima_em: r.proxima_em };
+  });
+  post('/api/obrigacoes/:id/excluir', ({ db, usuario, params }) => {
+    const o = obrigacoes.excluir(db, usuario, params.id);
+    aud(db, usuario, 'obrigacao_excluida', { hotel_id: o.hotel_id, alvo: o.nome });
+    return { ok: true };
   });
 
   // ---- fotos ----

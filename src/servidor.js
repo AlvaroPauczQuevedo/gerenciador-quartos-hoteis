@@ -1,18 +1,19 @@
 import { createServer } from 'node:http';
 import { join, dirname, resolve, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { abrirBanco, transacao, um, lerConfig } from './db.js';
+import { abrirBanco, transacao, um, todos, lerConfig, gravarConfig } from './db.js';
 import { criarRotas } from './rotas.js';
 import { lerCorpo, cookies, json, servirArquivo } from './http.js';
 import { ErroHttp } from './domain/comum.js';
 import * as usuarios from './domain/usuarios.js';
 import * as fotos from './domain/fotos.js';
 import { verificar } from './domain/agendador.js';
-import { filaPush } from './domain/notificacoes.js';
+import { filaPush, notificar } from './domain/notificacoes.js';
 import * as push from './domain/push.js';
 import * as backup from './domain/backup.js';
 import * as relatorios from './domain/relatorios.js';
 import * as auditoria from './domain/auditoria.js';
+import * as relatos from './domain/relatos.js';
 import { createReadStream } from 'node:fs';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -72,8 +73,11 @@ const CASCA_APP = ['/', '/manifest.webmanifest', ...arquivosPublicos.filter((f) 
 const SW = readFileSync(join(pastaPwa, 'sw-modelo.js'), 'utf8').replace("const VERSAO = '__VERSAO__';", `const VERSAO = '${VERSAO_APP}';`).replace('const CASCA = __ARQUIVOS__;', `const CASCA = ${JSON.stringify(CASCA_APP)};`);
 if (SW.includes('__VERSAO__') || SW.includes('__ARQUIVOS__')) throw new Error('sw.js: marcadores de versão não substituídos.');
 const COOKIE = 'sid';
+const INICIO = Date.now();
 const JANELA_LOGIN = 15 * 60e3;
 const tentativas = new Map(); // falhas de login por IP
+const relatosPorIp = new Map(); // relatos públicos (QR) por IP, na última hora
+const MAX_RELATOS_POR_IP_HORA = 5;
 
 const SEGURANCA = {
   'X-Content-Type-Options': 'nosniff',
@@ -94,6 +98,22 @@ function cookieSessao(req, valor, maxAge) {
   return `${COOKIE}=${valor}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${https ? '; Secure' : ''}`;
 }
 
+// Avisa os administradores (no máximo uma vez por dia) quando o backup não pôde ser feito.
+function alertarBackup(motivo) {
+  try {
+    const dia = new Date().toISOString().slice(0, 10);
+    if (lerConfig(db, 'alerta_backup_dia') === dia) return;
+    transacao(db, () => {
+      gravarConfig(db, 'alerta_backup_dia', dia);
+      notificar(db, todos(db, "SELECT id FROM usuarios WHERE papel = 'admin' AND ativo = 1").map((r) => r.id), { tipo: 'sistema', mensagem: `Atenção ao backup: ${motivo}` });
+    });
+    enviarPushPendentes();
+  } catch (e) {
+    descartarPushPendentes();
+    console.error('Alerta de backup:', e);
+  }
+}
+
 // Verificações de prazo/inspeção: a cada 5 min pelo relógio e também sob demanda nas requisições,
 // pois hospedagens gerenciadas podem pausar o processo quando não há acesso.
 let ultimaVerificacao = 0;
@@ -103,7 +123,7 @@ function rodarAgendador() {
     transacao(db, () => { verificar(db); auditoria.limparAcessosAntigos(db); });
     enviarPushPendentes();
     backup.backupDiario(db, dataDir).then((nome) => { if (nome) console.log(`Backup diário gerado: ${nome}`); })
-      .catch((e) => console.error('Backup diário falhou:', e.message));
+      .catch((e) => { console.error('Backup diário falhou:', e.message); alertarBackup(`o backup diário falhou (${e.message}).`); });
   } catch (e) {
     descartarPushPendentes();
     console.error('Agendador:', e);
@@ -120,10 +140,20 @@ async function tratar(req, res) {
   // Etiqueta de QR code da porta do quarto: /q/<id> leva ao quarto no app.
   const etiqueta = /^\/q\/(\d+)\/?$/.exec(caminho);
   if (etiqueta && (req.method === 'GET' || req.method === 'HEAD')) {
-    res.writeHead(302, { Location: `/#/quartos/${etiqueta[1]}`, 'Cache-Control': 'no-store' });
+    // Com sessão aberta vai para a ficha do quarto; sem login, para a página pública de relato de problema.
+    const destino = usuarios.porToken(db, sid) ? `/#/quartos/${etiqueta[1]}` : `/#/relatar/${etiqueta[1]}`;
+    res.writeHead(302, { Location: destino, 'Cache-Control': 'no-store' });
     return res.end();
   }
-  if (caminho === '/healthz') return json(res, 200, { ok: true, versao: VERSAO_APP });
+  if (caminho === '/healthz') {
+    // Aponte um monitor externo (ex.: UptimeRobot) para cá: responde 503 se o banco falhar ou se o backup estiver parado há mais de 48 h.
+    const corpo = { ok: true, versao: VERSAO_APP };
+    try { db.prepare('SELECT 1').get(); } catch { corpo.ok = false; corpo.banco = 'erro'; }
+    const idade = backup.idadeUltimoBackupHoras(dataDir);
+    corpo.backup_horas = idade == null ? null : Math.round(idade);
+    if (idade != null ? idade > 48 : Date.now() - INICIO > 2 * 3600e3) { corpo.ok = false; corpo.backup = 'atrasado'; }
+    return json(res, corpo.ok ? 200 : 503, corpo);
+  }
   if (caminho === '/service-worker.js' || caminho === '/sw.js') {
     res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Service-Worker-Allowed': '/' });
     return res.end(SW);
@@ -141,8 +171,9 @@ async function tratar(req, res) {
     const aparelho = auditoria.resumirAparelho(req.headers['user-agent']);
     let token;
     try {
-      token = usuarios.login(db, corpo.usuario, corpo.senha);
+      token = usuarios.login(db, corpo.usuario, corpo.senha, { codigo: corpo.codigo, ip, aparelho });
     } catch (e) {
+      if (e.segundoFator) return json(res, 200, { segundo_fator: true }); // senha correta: falta o código (não conta como falha)
       const atual = t && Date.now() - t.desde < JANELA_LOGIN ? t : { n: 0, desde: Date.now() };
       tentativas.set(ip, { ...atual, n: atual.n + 1 });
       auditoria.registrarAcesso(db, 'login_falha', { login: corpo.usuario, ip, aparelho, motivo: e.status === 401 ? 'usuário ou senha inválidos' : e.message });
@@ -153,6 +184,23 @@ async function tratar(req, res) {
     tentativas.delete(ip);
     auditoria.registrarAcesso(db, 'login_ok', { usuario: usuarios.porToken(db, token), ip, aparelho });
     return json(res, 200, { ok: true }, { 'Set-Cookie': cookieSessao(req, token, 43200) });
+  }
+  // Páginas públicas (sem login) do QR code do quarto.
+  const publicoQuarto = /^\/api\/publico\/quartos\/(\d+)$/.exec(caminho);
+  if (publicoQuarto && req.method === 'GET') return json(res, 200, relatos.dadosPublicos(db, publicoQuarto[1]));
+  if (caminho === '/api/publico/relato' && req.method === 'POST') {
+    const ip = ipCliente(req);
+    const agora = Date.now();
+    const lista = (relatosPorIp.get(ip) || []).filter((t) => agora - t < 3600e3);
+    if (lista.length >= MAX_RELATOS_POR_IP_HORA) throw new ErroHttp(429, 'Muitos relatos enviados deste aparelho. Tente novamente mais tarde ou ligue para a recepção.');
+    const corpo = await lerCorpo(req, 6 * 1024 * 1024);
+    relatosPorIp.set(ip, [...lista, agora]);
+    if (relatosPorIp.size > 10000) for (const [k, v] of relatosPorIp) if (!v.some((t) => agora - t < 3600e3)) relatosPorIp.delete(k);
+    descartarPushPendentes();
+    let resultado;
+    try { resultado = transacao(db, () => relatos.registrar(db, corpo, ctx)); } catch (e) { descartarPushPendentes(); throw e; }
+    enviarPushPendentes();
+    return json(res, 200, resultado);
   }
   if (caminho === '/api/config' && req.method === 'GET') {
     return json(res, 200, { modo: lerConfig(db, 'modo', 'piloto') });
@@ -202,13 +250,21 @@ async function tratar(req, res) {
     const rota = rotas.encontrar(req.method, caminho);
     if (!rota) throw new ErroHttp(404, 'Rota não encontrada.');
     const body = ['POST', 'PUT'].includes(req.method) ? await lerCorpo(req) : {};
+    // Chave de idempotência (modo offline): se a mesma ação já foi aplicada, não repete.
+    const idem = typeof body._idem === 'string' && /^[\w.-]{8,64}$/.test(body._idem) ? body._idem : null;
+    delete body._idem;
+    if (idem && um(db, 'SELECT 1 AS x FROM idempotencia WHERE chave = ? AND usuario_id = ?', idem, usuario.id)) return json(res, 200, { ok: true, repetido: true });
     const proto = req.headers['x-forwarded-proto'] || (req.socket.encrypted ? 'https' : 'http');
-    const cliente = { userAgent: req.headers['user-agent'] || '', urlPublica: req.headers.host ? `${proto}://${req.headers.host}` : null };
+    const cliente = { sessao: sid, userAgent: req.headers['user-agent'] || '', urlPublica: req.headers.host ? `${proto}://${req.headers.host}` : null };
     const args = { db, usuario, params: rota.params, query: Object.fromEntries(url.searchParams), body, ctx, cliente };
     descartarPushPendentes();
     let resultado;
     try {
-      resultado = rota.handler.mutacao ? transacao(db, () => rota.handler(args)) : rota.handler(args);
+      resultado = rota.handler.mutacao ? transacao(db, () => {
+        const r = rota.handler(args);
+        if (idem) db.prepare('INSERT OR IGNORE INTO idempotencia (chave, usuario_id, criado_em) VALUES (?, ?, ?)').run(idem, usuario.id, new Date().toISOString());
+        return r;
+      }) : rota.handler(args);
     } catch (e) {
       descartarPushPendentes();
       throw e;

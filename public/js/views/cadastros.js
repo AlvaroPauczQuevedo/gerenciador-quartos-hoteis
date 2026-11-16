@@ -20,17 +20,21 @@ export async function mostrar(el, _p, query = {}) {
   render(el, html`
     <div class="cabecalho"><div><h1>${admin ? 'Cadastros' : 'Equipe e cadastros'}</h1><p class="sub">${admin ? 'Unidades, quartos, checklist e usuários da plataforma.' : `Usuários, quartos e checklist do ${estado.usuario.hotel_nome}.`}</p></div></div>
       ${admin ? html`<section class="card" style="margin-bottom:1rem"><h2>Unidades hoteleiras</h2>
-        <div class="tabela-wrap"><table><thead><tr><th>Hotel</th><th>Cidade</th><th class="num">Quartos</th><th>Validação do gerente</th><th title="Orçamentos até este valor o gerente do hotel aprova">Gerente aprova até (R$)</th><th>Orçamento mensal (R$)</th></tr></thead><tbody>
+        <div class="tabela-wrap"><table><thead><tr><th>Hotel</th><th>Cidade</th><th class="num">Quartos</th><th>Validação do gerente</th><th title="Orçamentos até este valor o gerente do hotel aprova">Gerente aprova até (R$)</th><th>Orçamento mensal (R$)</th><th title="Permite relatar problema pela página do QR code, sem login">Relato pelo QR</th></tr></thead><tbody>
           ${hoteis.map((h) => html`<tr><td>${h.logo ? html`<img src="/img/hoteis/${h.logo}/horizontal.svg" alt="" style="height:22px;width:auto;display:block;margin-bottom:.2rem;background:#fff;border-radius:3px;padding:2px">` : ''}${h.nome}</td><td>${h.cidade || '—'}</td>
             <td class="num">${h.total_quartos}${h.quartos_provisorios ? html`<br><span class="badge warn sem-ponto">${h.quartos_provisorios} provisórios</span>` : !h.total_quartos ? html`<br><span class="badge danger sem-ponto">cadastrar</span>` : ''}</td><td><label class="check"><input type="checkbox" data-validacao="${h.id}" ${h.exige_validacao ? raw('checked') : ''}> exigida</label></td>
             <td><input type="number" min="0" step="50" style="max-width:9rem" data-config="limite_aprovacao_gerente" data-hotel="${h.id}" value="${h.limite_aprovacao_gerente || 0}"></td>
-            <td><input type="number" min="0" step="100" style="max-width:9rem" data-config="orcamento_mensal" data-hotel="${h.id}" value="${h.orcamento_mensal ?? ''}" placeholder="não definido"></td></tr>`)}</tbody></table></div>
+            <td><input type="number" min="0" step="100" style="max-width:9rem" data-config="orcamento_mensal" data-hotel="${h.id}" value="${h.orcamento_mensal ?? ''}" placeholder="não definido"></td>
+            <td><label class="check"><input type="checkbox" data-relato="${h.id}" ${h.relato_publico ? raw('checked') : ''}> ativo</label></td></tr>`)}</tbody></table></div>
         <p class="small muted">"Gerente aprova até": orçamentos de manutenção até esse valor são aprovados pelo gerente do hotel; acima, pela diretoria ou administração da rede (0 = sempre a rede).</p>
         <form class="form" id="f-hotel" style="margin-top:1rem"><h3>Nova unidade</h3><div class="form-grade" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr))">
           <label class="campo"><span class="obrig">Nome</span><input name="nome" required></label>
           <label class="campo"><span>Cidade</span><input name="cidade"></label></div>
           <div><button class="btn primario">Cadastrar unidade</button></div></form>
       </section>` : ''}
+      ${!admin ? html`<section class="card" style="margin-bottom:1rem"><h2>Relato de problema pelo QR code</h2>
+        <p class="small muted">Com isto ligado, quem escanear o QR da porta <strong>sem ter login</strong> (camareira, recepção, hóspede) vê um formulário para relatar o problema, com foto opcional. A solicitação chega ao gerente como prioridade média, com limite de envios por aparelho e por quarto.</p>
+        <label class="check"><input type="checkbox" data-relato="${hoteis[0]?.id}" ${hoteis[0]?.relato_publico ? raw('checked') : ''}> Permitir relato pelo QR code neste hotel</label></section>` : ''}
     <div class="grade grade-3">
 
       ${admin ? html`<section class="card" style="grid-column:1/-1"><h2>Importar quartos da planilha (HITS)</h2>
@@ -104,6 +108,7 @@ export async function mostrar(el, _p, query = {}) {
         ${usuarios.map((u) => html`<tr><td>${u.nome}</td><td><strong>${u.login}</strong></td><td>${M.PAPEIS[u.papel]}</td><td>${u.hotel_nome || 'Rede (todas)'}</td>
           <td class="nowrap">${u.id === estado.usuario.id ? html`<span class="badge ok">Você</span>` : !u.gerenciavel ? html`<span class="badge sem-ponto" title="Acesso da rede: só o administrador geral pode alterar">Acesso da rede</span>` : html`<button class="btn pequeno ${u.ativo ? '' : 'primario'}" data-alternar="${u.id}">${u.ativo ? 'Desativar' : 'Reativar'}</button>
             <button class="btn pequeno" data-senha="${u.id}" data-nome="${u.nome}">Redefinir senha</button>
+            ${u.totp_ativo ? html`<button class="btn pequeno" data-reset2fa="${u.id}" title="Use quando a pessoa perdeu o celular e os códigos de recuperação">Redefinir 2 etapas</button>` : ''}
             <button class="btn pequeno perigo" data-excluir="${u.id}" data-nome="${u.nome}" data-login="${u.login}">Excluir</button>`}</td></tr>`)}</tbody></table></div>
       <form class="form" id="f-usuario" style="margin-top:1rem"><h3>Novo usuário</h3><div class="form-grade">
         <label class="campo"><span class="obrig">Nome</span><input name="nome" required></label>
@@ -240,6 +245,14 @@ export async function mostrar(el, _p, query = {}) {
   }
   for (const c of $$('[data-validacao]', el)) {
     c.addEventListener('change', async () => { await put(`/api/hoteis/${c.dataset.validacao}`, { exige_validacao: c.checked }); toast('Configuração salva.'); });
+  }
+  for (const c of $$('[data-relato]', el)) {
+    c.addEventListener('change', async () => {
+      try { await post(`/api/hoteis/${c.dataset.relato}/relato-publico`, { ativo: c.checked }); toast(c.checked ? 'Relato pelo QR code ativado.' : 'Relato pelo QR code desativado.'); } catch (err) { c.checked = !c.checked; toast(err.message, 'erro'); }
+    });
+  }
+  for (const b of $$('[data-reset2fa]', el)) {
+    b.addEventListener('click', async () => { try { await post(`/api/usuarios/${b.dataset.reset2fa}/2fa/resetar`); toast('Verificação em duas etapas desligada. O usuário pode ativar de novo em Minha conta.'); recarregar(); } catch (err) { toast(err.message, 'erro'); } });
   }
   for (const b of $$('[data-alternar]', el)) b.addEventListener('click', async () => { await post(`/api/usuarios/${b.dataset.alternar}/alternar`); recarregar(); });
 }
